@@ -104,10 +104,29 @@ enum Action: Sendable {
 }
 ```
 
-- `onRoute` — HostController 設定，接收導航事件後執行導航
-- `onCallback` — 父 HostController 設定，接收跨 VC 回傳值
+- `onRoute` — HostController 設定（同步），接收導航事件後執行導航
+- `onCallback` — 父 HostController 設定（async），接收跨 VC 回傳值
 - Router 不自行導航，統一呼叫 `onRoute?(.toXxx)` 後由 C 處理
+- 跨 VC 回傳在 `doAction` handler 內呼叫 `await onCallback?(.xxx)`，async 自然向上傳遞，HostController 不需要額外 Task
 - 非 UI 相關的 property（closure 等）標注 `@ObservationIgnored`
+
+```swift
+// ViewModel
+@ObservationIgnored var onRoute: (@MainActor (Router) -> Void)?
+@ObservationIgnored var onCallback: (@MainActor (Callback) async -> Void)?
+
+// doAction handler 內
+case .didSelectItem(let item):
+  await onCallback?(.didSelectItem(item))
+```
+
+```swift
+// 父 HostController，不需要 Task
+childViewModel.onCallback = { [weak self] callback in
+  self?.dismiss(animated: true)
+  await self?.viewModel.doAction(.view(.itemSelected(item)))
+}
+```
 
 ### V — View
 
