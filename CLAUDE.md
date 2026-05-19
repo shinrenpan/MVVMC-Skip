@@ -42,7 +42,7 @@ Pages/FeatureName/
 
 ### M — Models
 
-三個區塊，各自獨立 `extension`，不可混用：
+常見三個區塊：**State / Domain Models / DTOs**，不強制全部實作，但各區塊用獨立 `extension` 隔開：
 
 | 區塊 | 抽象層次 | 消費者 |
 |---|---|---|
@@ -51,7 +51,6 @@ Pages/FeatureName/
 | `DTOs` | API 原始資料 | Network Layer，解碼後立即 mapping |
 
 - `State` 是 `struct`，遵守 `Sendable`，所有欄位給定預設值
-- `API` 是 State 內的子 struct，每個 API 對應一個狀態欄位（`.prepare / .loading / .success / .error`）
 - DTO 是 `Codable & Sendable` struct，提供 `toDomain()` 轉換為 Domain Model，轉換邏輯屬於 DTO 自身
 - State 不持有 DTO，UI 層對 DTO 的存在完全透明
 
@@ -59,12 +58,7 @@ Pages/FeatureName/
 // MARK: - State
 extension FeatureViewModel {
   struct State: Sendable {
-    var api: API = .init()
     var items: [Item] = []
-  }
-
-  struct API: Sendable {
-    var getItems: APIStatus = .prepare
   }
 }
 
