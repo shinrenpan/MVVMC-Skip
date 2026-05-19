@@ -98,10 +98,9 @@ extension FeatureViewModel {
 
 ```swift
 enum Action: Sendable {
-  case view(ViewAction)           // 來自 View 的使用者操作
-  case route(Router)              // 導航意圖，透過 onAction? 送至 HostController
-  case apiRequest(APIRequest)     // 呼叫 API
-  case apiResponse(APIResponse)   // 處理 API 回應，更新 state
+  case view(ViewAction)             // 來自 View 的使用者操作
+  case apiRequest(APIRequest)       // 呼叫 API
+  case apiResponse(APIResponse)     // 處理 API 回應，更新 state
 }
 ```
 
