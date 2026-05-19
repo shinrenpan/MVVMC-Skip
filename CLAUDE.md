@@ -191,27 +191,6 @@ API 請求:
 
 ---
 
-## Xcode Template
-
-新建 Feature 使用 Xcode File Template，不使用 `feature-new` skill（已移除）。
-
-Template 原始檔：`Templates/MVVMC Feature.xctemplate/`
-
-安裝（新機器時執行）：
-```bash
-cp -r Templates/MVVMC\ Feature.xctemplate ~/Library/Developer/Xcode/Templates/File\ Templates/MVVMC/
-```
-
-使用：Xcode → New File → MVVMC → MVVMC Feature → 輸入 Feature 名稱（如 `UserProfile`）
-
-產生四個檔案：
-- `FeatureViewModel+Models.swift` — State、Domain Models、DTOs 骨架
-- `FeatureViewModel.swift` — `@Observable @MainActor`、`doAction` 單一進入點
-- `FeatureView.swift` — SwiftUI placeholder + Preview
-- `FeatureHostController.swift` — 純 Router（viewDidLoad 設 onRoute / onCallback）
-
----
-
 ## 常見情境
 
 ### 只執行一次（viewDidLoad 等價）

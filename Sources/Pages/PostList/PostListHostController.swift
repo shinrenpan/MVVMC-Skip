@@ -23,6 +23,7 @@ final class PostListHostController: UIHostingController<PostListView> {
   override func viewDidDisappear(_ animated: Bool) {
     super.viewDidDisappear(animated)
     viewModel.onAction = nil
+    self.tabBarController?.selectedIndex = 2
   }
 }
 
