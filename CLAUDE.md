@@ -141,9 +141,9 @@ childViewModel.onCallback = { [weak self] callback in
 
 - `@MainActor final class`，繼承 `UIHostingController<FeatureView>`
 - **純 Router**：push / present / dismiss 全在這裡，不做任何 task 管理
-- `viewDidLoad`：設定 `viewModel.onRoute` 監聽導航事件
-- `viewDidDisappear`：清空 `onRoute` / `onCallback` closure，防止 retain cycle
+- `viewDidLoad`：設定 `viewModel.onRoute` / `onCallback`
 - HostController 不管 lifecycle 觸發，不持有任何 Task
+- closure 用 `[weak self]`，ViewModel 生命週期與 HostController 一致，不需要手動 nil 清空
 - 監聽子 VC 回傳：present 前設定 `childViewModel.onCallback`
 
 ```swift
@@ -164,11 +164,6 @@ final class FeatureHostController: UIHostingController<FeatureView> {
     viewModel.onRoute = { [weak self] router in
       self?.handleRouter(router)
     }
-  }
-
-  override func viewDidDisappear(_ animated: Bool) {
-    super.viewDidDisappear(animated)
-    viewModel.onRoute = nil
   }
 }
 ```
