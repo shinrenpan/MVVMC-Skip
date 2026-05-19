@@ -119,8 +119,11 @@ case .didSelectItem(let item):
 ```swift
 // 父 HostController，不需要 Task
 childViewModel.onCallback = { [weak self] callback in
-  self?.dismiss(animated: true)
-  await self?.viewModel.doAction(.view(.itemSelected(item)))
+  switch callback {
+  case .didSelectItem(let item):
+    self?.dismiss(animated: true)
+    await self?.viewModel.doAction(.view(.itemSelected(item)))
+  }
 }
 ```
 
@@ -174,7 +177,7 @@ final class FeatureHostController: UIHostingController<FeatureView> {
   → VM handleViewAction → doAction(.apiRequest(...))
 
 API 請求:
-  → VM handleAPIRequest → 呼叫 API → doAction(.apiResponse)
+  → VM handleAPIRequest → 呼叫 API → doAction(.apiResponse(...))
   → VM handleAPIResponse → 更新 state → View 自動刷新
 
 導航:
