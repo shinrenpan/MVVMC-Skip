@@ -42,6 +42,10 @@ final class AppRouter: NSObject {
       nav.delegate = self
       nav.interactivePopGestureRecognizer?.isEnabled = true
       nav.interactivePopGestureRecognizer?.delegate = self
+      if #available(iOS 26, *) {
+        nav.interactiveContentPopGestureRecognizer?.isEnabled = true
+        nav.interactiveContentPopGestureRecognizer?.delegate = self
+      }
     }
     destination.appTransitionStyle = style
     nav.pushViewController(destination, animated: animated)
