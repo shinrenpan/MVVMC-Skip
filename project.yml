@@ -14,6 +14,10 @@ targets:
       path: Sources/App/Info.plist
       properties:
         UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: com.joe.mvvmc.demo
+            CFBundleURLSchemes:
+              - mvvmc
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
           UISceneConfigurations:

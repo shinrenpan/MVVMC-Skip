@@ -25,6 +25,7 @@
 		5069034991459ACF1E2494B6 /* SettingsHostController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95E294C8DBC6F56848683344 /* SettingsHostController.swift */; };
 		5586C3F5DD90455460DE9333 /* PostListMocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A85A97DAB5C20F3F94EFF5AE /* PostListMocks.swift */; };
 		55EE1E649A72574AF6708B06 /* UserDetailViewModel+APIs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AC2824A1EBC6583AC9EB2D9 /* UserDetailViewModel+APIs.swift */; };
+		66D7FE6EB350DFE6BA4A9E21 /* Deeplink.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBDA0261F25A1A100587EDFB /* Deeplink.swift */; };
 		9986A84A08C38DD65AA73D08 /* PostListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACE684FD01AD30993E2F660E /* PostListView.swift */; };
 		AB7F47D967379AFDA4C7FBBD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC266501119F17523DA1B9E4 /* SettingsView.swift */; };
 		AE85D8BEA69C161A2664CD7D /* PostListHostController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C0A46F2627755738E97F97 /* PostListHostController.swift */; };
@@ -86,6 +87,7 @@
 		B830F9640E19A3D6425C345B /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
 		C0A8205741AC2DF613A15906 /* PostDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailViewModel.swift; sourceTree = "<group>"; };
 		C116B2F138E28D4C0928DF25 /* PostFilterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostFilterView.swift; sourceTree = "<group>"; };
+		CBDA0261F25A1A100587EDFB /* Deeplink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Deeplink.swift; sourceTree = "<group>"; };
 		CCE0D2080B05198DF7E0F5B6 /* PostListViewModel+Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PostListViewModel+Models.swift"; sourceTree = "<group>"; };
 		D94965F73E2948DA320588EC /* PostFilterViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostFilterViewModel.swift; sourceTree = "<group>"; };
 		E1C0A46F2627755738E97F97 /* PostListHostController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostListHostController.swift; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 			children = (
 				8B97F8DCC38415F99D707257 /* AppDelegate.swift */,
 				B830F9640E19A3D6425C345B /* AppRouter.swift */,
+				CBDA0261F25A1A100587EDFB /* Deeplink.swift */,
 				B538692666D64D4E69AA73C6 /* Info.plist */,
 				24B4EB726C71E45B97192ABE /* SceneDelegate.swift */,
 			);
@@ -323,6 +326,7 @@
 				1B256907AEDD63DE3686DEB1 /* APIStatus.swift in Sources */,
 				17DD0771F8E896F9F4945066 /* AppDelegate.swift in Sources */,
 				E61432B28D9755C43A666306 /* AppRouter.swift in Sources */,
+				66D7FE6EB350DFE6BA4A9E21 /* Deeplink.swift in Sources */,
 				4EA5DAA27AD21A10CF642F99 /* PostDetailHostController.swift in Sources */,
 				D7B325E9CDFEB4C5A2A9B382 /* PostDetailMocks.swift in Sources */,
 				D1A028837F4B7E86581E89C5 /* PostDetailView.swift in Sources */,

@@ -96,6 +96,26 @@ final class AppRouter: NSObject {
     source.present(destination, animated: animated)
   }
 
+  func deeplink(_ destination: UIViewController, animated: Bool = true) {
+    let rootVC = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .first?.keyWindow?.rootViewController
+    guard let rootVC else {
+      assertionFailure("AppRouter.deeplink(): 找不到 rootViewController")
+      return
+    }
+    destination.appTransitionStyle = .sheet
+    destination.navigationItem.leftBarButtonItem = UIBarButtonItem(
+      systemItem: .close,
+      primaryAction: UIAction { [weak destination] _ in
+        destination?.dismiss(animated: true)
+      }
+    )
+    let nav = UINavigationController(rootViewController: destination)
+    nav.modalPresentationStyle = .fullScreen
+    rootVC.present(nav, animated: animated)
+  }
+
   func tab(_ index: Int, from source: UIViewController) {
     guard let tabBar = source.tabBarController else {
       assertionFailure("AppRouter.tab(): source VC 沒有 tabBarController，請確認 rootViewController 設定為 UITabBarController")

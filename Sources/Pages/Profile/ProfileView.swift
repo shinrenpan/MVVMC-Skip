@@ -16,6 +16,14 @@ struct ProfileView: View {
           Task { await viewModel.doAction(.view(.toSettings)) }
         }
       }
+      Section("Deeplink Demo") {
+        Button("mvvmc://settings") {
+          Task { await viewModel.doAction(.view(.triggerDeeplink(URL(string: "mvvmc://settings")!))) }
+        }
+        Button("mvvmc://posts/1") {
+          Task { await viewModel.doAction(.view(.triggerDeeplink(URL(string: "mvvmc://posts/1")!))) }
+        }
+      }
     }
     .navigationTitle("Profile")
   }

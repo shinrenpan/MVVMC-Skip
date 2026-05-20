@@ -1,4 +1,5 @@
 import Observation
+import UIKit
 
 @MainActor
 @Observable
@@ -25,6 +26,7 @@ extension ProfileViewModel {
   enum ViewAction: Sendable {
     case toPosts
     case toSettings
+    case triggerDeeplink(URL)
   }
 
   private func handleViewAction(_ action: ViewAction) async {
@@ -33,6 +35,8 @@ extension ProfileViewModel {
       onRoute?(.toPosts)
     case .toSettings:
       onRoute?(.toSettings)
+    case let .triggerDeeplink(url):
+      await UIApplication.shared.open(url)
     }
   }
 }
