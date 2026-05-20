@@ -122,7 +122,10 @@ claude mcp add mvvmc -s user node "$PWD/dist/index.js"
 
 ### Demo 專案
 
+`project.pbxproj` 由 XcodeGen 產生，不納入版本控制。clone 後需先執行：
+
 ```bash
+xcodegen generate
 open MVVMCDemo.xcodeproj
 ```
 
