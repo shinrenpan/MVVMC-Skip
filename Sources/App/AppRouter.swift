@@ -4,9 +4,9 @@ import UIKit
 
 extension AppRouter {
   enum TransitionStyle: Equatable {
-    case push   // 預設，右滑進入
-    case modal  // 由下往上
-    case fade   // 淡入淡出
+    case push
+    case modal
+    case fade
   }
 }
 
@@ -29,22 +29,22 @@ extension UIViewController {
 // MARK: - AppRouter
 
 @MainActor
-final class AppRouter {
+final class AppRouter: NSObject {
   static let shared = AppRouter()
-  private init() {}
+  private override init() {}
 
   func to(_ destination: UIViewController, from source: UIViewController, style: TransitionStyle = .push, animated: Bool = true) {
     guard let nav = source.navigationController else {
       assertionFailure("AppRouter.to(): source VC 沒有 navigationController，請確認 rootViewController 設定為 UINavigationController")
       return
     }
-    destination.appTransitionStyle = style
-    if style == .push {
-      nav.pushViewController(destination, animated: animated)
-    } else {
-      applyTransition(style, isPush: true, on: nav)
-      nav.pushViewController(destination, animated: false)
+    if nav.delegate !== self {
+      nav.delegate = self
+      nav.interactivePopGestureRecognizer?.isEnabled = true
+      nav.interactivePopGestureRecognizer?.delegate = self
     }
+    destination.appTransitionStyle = style
+    nav.pushViewController(destination, animated: animated)
   }
 
   func back(from source: UIViewController, animated: Bool = true) {
@@ -52,13 +52,7 @@ final class AppRouter {
       assertionFailure("AppRouter.back(): source VC 沒有 navigationController")
       return
     }
-    let style = nav.topViewController?.appTransitionStyle ?? .push
-    if style == .push {
-      nav.popViewController(animated: animated)
-    } else {
-      applyTransition(style, isPush: false, on: nav)
-      nav.popViewController(animated: false)
-    }
+    nav.popViewController(animated: animated)
   }
 
   func backTo(_ destination: UIViewController, from source: UIViewController, animated: Bool = true) {
@@ -66,13 +60,7 @@ final class AppRouter {
       assertionFailure("AppRouter.backTo(): source VC 沒有 navigationController")
       return
     }
-    let style = nav.topViewController?.appTransitionStyle ?? .push
-    if style == .push {
-      nav.popToViewController(destination, animated: animated)
-    } else {
-      applyTransition(style, isPush: false, on: nav)
-      nav.popToViewController(destination, animated: false)
-    }
+    nav.popToViewController(destination, animated: animated)
   }
 
   func backToRoot(from source: UIViewController, animated: Bool = true) {
@@ -80,33 +68,109 @@ final class AppRouter {
       assertionFailure("AppRouter.backToRoot(): source VC 沒有 navigationController")
       return
     }
-    let style = nav.topViewController?.appTransitionStyle ?? .push
-    if style == .push {
-      nav.popToRootViewController(animated: animated)
-    } else {
-      applyTransition(style, isPush: false, on: nav)
-      nav.popToRootViewController(animated: false)
+    nav.popToRootViewController(animated: animated)
+  }
+}
+
+// MARK: - UINavigationControllerDelegate
+
+extension AppRouter: UINavigationControllerDelegate {
+  func navigationController(
+    _ navigationController: UINavigationController,
+    animationControllerFor operation: UINavigationController.Operation,
+    from fromVC: UIViewController,
+    to toVC: UIViewController
+  ) -> (any UIViewControllerAnimatedTransitioning)? {
+    let style = operation == .push ? toVC.appTransitionStyle : fromVC.appTransitionStyle
+    guard style != .push else { return nil }
+    return AppTransitionAnimator(style: style, isPush: operation == .push)
+  }
+}
+
+// MARK: - UIGestureRecognizerDelegate
+
+extension AppRouter: UIGestureRecognizerDelegate {
+  func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    guard let nav = gestureRecognizer.view?.next as? UINavigationController else { return true }
+    return nav.viewControllers.count > 1
+  }
+}
+
+// MARK: - AppTransitionAnimator
+
+private final class AppTransitionAnimator: NSObject, UIViewControllerAnimatedTransitioning {
+  let style: AppRouter.TransitionStyle
+  let isPush: Bool
+
+  init(style: AppRouter.TransitionStyle, isPush: Bool) {
+    self.style = style
+    self.isPush = isPush
+  }
+
+  func transitionDuration(using transitionContext: (any UIViewControllerContextTransitioning)?) -> TimeInterval { 0.35 }
+
+  func animateTransition(using transitionContext: any UIViewControllerContextTransitioning) {
+    switch style {
+    case .modal: animateModal(transitionContext)
+    case .fade:  animateFade(transitionContext)
+    case .push:  transitionContext.completeTransition(true)
     }
   }
 }
 
-// MARK: - CATransition
-
-private extension AppRouter {
-  func applyTransition(_ style: TransitionStyle, isPush: Bool, on nav: UINavigationController) {
-    let transition = CATransition()
-    transition.duration = 0.35
-    switch style {
-    case .modal:
-      transition.type = isPush ? .moveIn : .reveal
-      transition.subtype = isPush ? .fromTop : .fromBottom
-      transition.timingFunction = CAMediaTimingFunction(name: isPush ? .easeOut : .easeIn)
-    case .fade:
-      transition.type = .fade
-      transition.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-    case .push:
-      break
+private extension AppTransitionAnimator {
+  func animateModal(_ ctx: any UIViewControllerContextTransitioning) {
+    let duration = transitionDuration(using: ctx)
+    if isPush {
+      guard let toVC = ctx.viewController(forKey: .to), let toView = ctx.view(forKey: .to) else {
+        ctx.completeTransition(false); return
+      }
+      let finalFrame = ctx.finalFrame(for: toVC)
+      toView.frame = finalFrame.offsetBy(dx: 0, dy: finalFrame.height)
+      ctx.containerView.addSubview(toView)
+      UIView.animate(withDuration: duration, delay: 0, options: .curveEaseOut) {
+        toView.frame = finalFrame
+      } completion: { _ in
+        ctx.completeTransition(!ctx.transitionWasCancelled)
+      }
+    } else {
+      guard let fromVC = ctx.viewController(forKey: .from),
+            let fromView = ctx.view(forKey: .from),
+            let toView = ctx.view(forKey: .to) else {
+        ctx.completeTransition(false); return
+      }
+      ctx.containerView.insertSubview(toView, belowSubview: fromView)
+      let initialFrame = ctx.initialFrame(for: fromVC)
+      UIView.animate(withDuration: duration, delay: 0, options: .curveEaseIn) {
+        fromView.frame = initialFrame.offsetBy(dx: 0, dy: initialFrame.height)
+      } completion: { _ in
+        ctx.completeTransition(!ctx.transitionWasCancelled)
+      }
     }
-    nav.view.layer.add(transition, forKey: kCATransition)
+  }
+
+  func animateFade(_ ctx: any UIViewControllerContextTransitioning) {
+    let duration = transitionDuration(using: ctx)
+    if isPush {
+      guard let toView = ctx.view(forKey: .to) else { ctx.completeTransition(false); return }
+      toView.alpha = 0
+      ctx.containerView.addSubview(toView)
+      UIView.animate(withDuration: duration) {
+        toView.alpha = 1
+      } completion: { _ in
+        ctx.completeTransition(!ctx.transitionWasCancelled)
+      }
+    } else {
+      guard let fromView = ctx.view(forKey: .from),
+            let toView = ctx.view(forKey: .to) else {
+        ctx.completeTransition(false); return
+      }
+      ctx.containerView.insertSubview(toView, belowSubview: fromView)
+      UIView.animate(withDuration: duration) {
+        fromView.alpha = 0
+      } completion: { _ in
+        ctx.completeTransition(!ctx.transitionWasCancelled)
+      }
+    }
   }
 }
