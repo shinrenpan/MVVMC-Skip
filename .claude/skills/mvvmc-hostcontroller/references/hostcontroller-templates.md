@@ -56,8 +56,7 @@ private extension FeatureHostController {
   func handleRouter(_ router: FeatureViewModel.Router) {
     switch router {
     case let .toDetail(item):
-      let detailVC = DetailHostController(viewModel: .init(item: item))
-      navigationController?.pushViewController(detailVC, animated: true)
+      AppRouter.shared.to(DetailHostController(id: item.id), from: self)
     }
   }
 }
@@ -95,25 +94,21 @@ private extension PostListHostController {
   func handleRouter(_ router: PostListViewModel.Router) {
     switch router {
     case let .toDetail(post):
-      let detailVC = PostDetailHostController(viewModel: .init(post: post))
-      navigationController?.pushViewController(detailVC, animated: true)
+      AppRouter.shared.to(PostDetailHostController(id: post.id, title: post.title, body: post.body), from: self)
 
     case .toFilter:
       let filterVM = PostFilterViewModel()
       filterVM.onCallback = { [weak self] callback in
-        await self?.handleFilterCallback(callback)
+        guard let self else { return }
+        switch callback {
+        case let .didSelectUser(user):
+          AppRouter.shared.back(from: self)
+          await self.viewModel.doAction(.view(.didFilterUser(user.id)))
+        case .didCancel:
+          AppRouter.shared.back(from: self)
+        }
       }
-      let filterVC = PostFilterHostController(viewModel: filterVM)
-      present(filterVC, animated: true)
-    }
-  }
-
-  func handleFilterCallback(_ callback: PostFilterViewModel.Callback) async {
-    switch callback {
-    case let .didSelectUser(user):
-      await viewModel.doAction(.view(.didFilterUser(user.id)))
-    case .didCancel:
-      break
+      AppRouter.shared.to(PostFilterHostController(viewModel: filterVM), from: self, style: .modal)
     }
   }
 }
@@ -129,8 +124,10 @@ private extension PostListHostController {
 | `viewModel` 非 `private let` | `private let viewModel` | HostController 持有，外部無需存取 |
 | closure 未用 `[weak self]` | `{ [weak self] router in` | 避免循環引用 |
 | ViewModel 直接做 `push` | 透過 `onRoute?(.toXxx)` 轉發 | ViewModel 不應持有 UIKit 依賴 |
-| present 前未設定 `onCallback` | 設定後再 present | present 後子 VC 可能立即觸發 callback |
-| `required init?(coder:)` 未標 unavailable | 加上 `@available(*, unavailable)` | 防止 Storyboard 誤用 |
+| `navigationController?.pushViewController` | `AppRouter.shared.to(..., from: self)` | 所有導航統一走 AppRouter |
+| `present(vc, animated:)` / `dismiss` | `AppRouter.shared.to(..., style: .modal)` / `AppRouter.shared.back(from: self)` | 所有導航統一走 AppRouter |
+| callback 內未 `guard let self` | `guard let self else { return }` | 避免 optional chaining |
+| callback 內用 `dismiss` 返回 | `AppRouter.shared.back(from: self)` | 統一 pop，不使用 dismiss |
 | `onCallback` closure 包 `Task` | `onCallback` 是 async，直接 `await` | async closure 不需要包 Task |
 | `viewDidDisappear` 設 `onRoute = nil` | 不需要 | ViewModel 由 HostController 持有，`[weak self]` 已足夠 |
 | HostController 啟動 Task 觸發 ViewModel | View 的 `.task` 負責 Lifecycle | HostController 是純 Router |

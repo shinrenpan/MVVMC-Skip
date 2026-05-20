@@ -198,10 +198,15 @@ API 請求:
 
 - **無狀態**：不持有任何 stored property，nav controller 從 `source.navigationController` 動態取得
 - **assertionFailure**：`source.navigationController` 為 nil 代表 developer 架構設定錯誤（root 不是 `UINavigationController`），Debug 下立即崩潰提示
+- **轉場動畫**：透過 `UINavigationControllerDelegate` 實作，支援三種樣式
 
 ```swift
-// 前進
+// 前進（預設 push，原生右滑）
 AppRouter.shared.to(DetailHostController(...), from: self)
+
+// 前進（自訂轉場）
+AppRouter.shared.to(FilterHostController(...), from: self, style: .modal)  // 由下往上
+AppRouter.shared.to(SomeHostController(...), from: self, style: .fade)     // 淡入淡出
 
 // 後退
 AppRouter.shared.back(from: self)
@@ -213,7 +218,15 @@ AppRouter.shared.backTo(targetVC, from: self)
 AppRouter.shared.backToRoot(from: self)
 ```
 
-`SceneDelegate` 只需確保 `rootViewController` 是 `UINavigationController`，AppRouter 不需要任何 register / setup。
+`SceneDelegate` 設定：
+
+```swift
+let nav = UINavigationController(rootViewController: ...)
+window.rootViewController = nav
+window.backgroundColor = .systemBackground  // 避免轉場黑背景
+```
+
+AppRouter 會在第一次 `to()` 時自動設定 `nav.delegate` 與手勢處理，不需要額外 register / setup。
 
 ---
 
