@@ -87,12 +87,14 @@ final class AppRouter: NSObject {
   func sheet(
     _ destination: UIViewController,
     from source: UIViewController,
-    detents: [UISheetPresentationController.Detent] = [.large()],
+    detents: [UISheetPresentationController.Detent]? = nil,
     animated: Bool = true
   ) {
     destination.appTransitionStyle = .sheet
     destination.modalPresentationStyle = .pageSheet
-    destination.sheetPresentationController?.detents = detents
+    if let detents {
+      destination.sheetPresentationController?.detents = detents
+    }
     source.present(destination, animated: animated)
   }
 

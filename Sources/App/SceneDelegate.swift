@@ -45,7 +45,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 // MARK: - UNUserNotificationCenterDelegate
 
 extension SceneDelegate: UNUserNotificationCenterDelegate {
-  func userNotificationCenter(
+  nonisolated func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
@@ -54,10 +54,10 @@ extension SceneDelegate: UNUserNotificationCenterDelegate {
     guard let urlString = response.notification.request.content.userInfo["deeplink"] as? String,
           let url = URL(string: urlString),
           let deeplink = Deeplink(url: url) else { return }
-    Task { AppRouter.shared.deeplink(deeplink.makeHostController()) }
+    Task { @MainActor in AppRouter.shared.deeplink(deeplink.makeHostController()) }
   }
 
-  func userNotificationCenter(
+  nonisolated func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
