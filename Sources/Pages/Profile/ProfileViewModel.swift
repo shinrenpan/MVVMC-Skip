@@ -1,5 +1,6 @@
 import Observation
 import UIKit
+import UserNotifications
 
 @MainActor
 @Observable
@@ -27,6 +28,7 @@ extension ProfileViewModel {
     case toPosts
     case toSettings
     case triggerDeeplink(URL)
+    case scheduleNotification(deeplinkURL: String)
   }
 
   private func handleViewAction(_ action: ViewAction) async {
@@ -37,7 +39,20 @@ extension ProfileViewModel {
       onRoute?(.toSettings)
     case let .triggerDeeplink(url):
       await UIApplication.shared.open(url)
+    case let .scheduleNotification(deeplinkURL):
+      await scheduleDeeplinkNotification(url: deeplinkURL)
     }
+  }
+
+  private func scheduleDeeplinkNotification(url: String) async {
+    let center = UNUserNotificationCenter.current()
+    guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
+    let content = UNMutableNotificationContent()
+    content.title = "Deeplink Demo"
+    content.body = url
+    content.userInfo = ["deeplink": url]
+    let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+    try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger))
   }
 }
 

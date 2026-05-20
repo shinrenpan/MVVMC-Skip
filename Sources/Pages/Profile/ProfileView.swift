@@ -24,6 +24,14 @@ struct ProfileView: View {
           Task { await viewModel.doAction(.view(.triggerDeeplink(URL(string: "mvvmc://posts/1")!))) }
         }
       }
+      Section("Push Notification Demo") {
+        Button("5 秒後推播 → mvvmc://settings") {
+          Task { await viewModel.doAction(.view(.scheduleNotification(deeplinkURL: "mvvmc://settings"))) }
+        }
+        Button("5 秒後推播 → mvvmc://posts/1") {
+          Task { await viewModel.doAction(.view(.scheduleNotification(deeplinkURL: "mvvmc://posts/1"))) }
+        }
+      }
     }
     .navigationTitle("Profile")
   }

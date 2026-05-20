@@ -1,4 +1,5 @@
 import UIKit
+import UserNotifications
 
 @MainActor
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
@@ -32,9 +33,35 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window.makeKeyAndVisible()
     self.window = window
 
+    UNUserNotificationCenter.current().delegate = self
+
     if let url = connectionOptions.urlContexts.first?.url,
        let deeplink = Deeplink(url: url) {
       AppRouter.shared.deeplink(deeplink.makeHostController())
     }
+  }
+}
+
+// MARK: - UNUserNotificationCenterDelegate
+
+extension SceneDelegate: UNUserNotificationCenterDelegate {
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    defer { completionHandler() }
+    guard let urlString = response.notification.request.content.userInfo["deeplink"] as? String,
+          let url = URL(string: urlString),
+          let deeplink = Deeplink(url: url) else { return }
+    Task { AppRouter.shared.deeplink(deeplink.makeHostController()) }
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .sound])
   }
 }
