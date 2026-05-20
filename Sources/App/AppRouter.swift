@@ -87,6 +87,16 @@ private final class NavigationTransitionDelegate: NSObject, UINavigationControll
     guard style != .push else { return nil }
     return AppTransitionAnimator(style: style, operation: operation)
   }
+
+  func navigationController(
+    _ navigationController: UINavigationController,
+    didShow viewController: UIViewController,
+    animated: Bool
+  ) {
+    // push style 才啟用 swipe back；modal / fade 語意上不應側滑返回
+    navigationController.interactivePopGestureRecognizer?.isEnabled =
+      viewController.appTransitionStyle == .push
+  }
 }
 
 // MARK: - AppTransitionAnimator
