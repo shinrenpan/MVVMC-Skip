@@ -53,9 +53,12 @@ final class AppRouter: NSObject {
   }
 
   func back(from source: UIViewController, animated: Bool = true) {
-    switch source.appTransitionStyle {
+    let style = source.appTransitionStyle != .push
+      ? source.appTransitionStyle
+      : source.navigationController?.appTransitionStyle ?? .push
+    switch style {
     case .sheet:
-      source.dismiss(animated: animated)
+      (source.navigationController ?? source).dismiss(animated: animated)
     default:
       guard let nav = source.navigationController else {
         assertionFailure("AppRouter.back(): source VC 沒有 navigationController")
@@ -81,11 +84,16 @@ final class AppRouter: NSObject {
     nav.popToRootViewController(animated: animated)
   }
 
-  func sheet(_ destination: UIViewController, from source: UIViewController, animated: Bool = true) {
+  func sheet(
+    _ destination: UIViewController,
+    from source: UIViewController,
+    detents: [UISheetPresentationController.Detent] = [.large()],
+    animated: Bool = true
+  ) {
     destination.appTransitionStyle = .sheet
-    let nav = UINavigationController(rootViewController: destination)
-    nav.modalPresentationStyle = .pageSheet
-    source.present(nav, animated: animated)
+    destination.modalPresentationStyle = .pageSheet
+    destination.sheetPresentationController?.detents = detents
+    source.present(destination, animated: animated)
   }
 
   func tab(_ index: Int, from source: UIViewController) {

@@ -208,8 +208,11 @@ AppRouter.shared.to(DetailHostController(...), from: self)
 AppRouter.shared.to(FilterHostController(...), from: self, style: .modal)
 AppRouter.shared.to(SomeHostController(...), from: self, style: .fade)
 
-// Sheet（系統 pageSheet，destination 自動包 UINavigationController）
-AppRouter.shared.sheet(SettingsHostController(...), from: self)
+// Sheet（預設 large detent，destination 自行決定是否包 UINavigationController）
+AppRouter.shared.sheet(SomeHostController(...), from: self)
+AppRouter.shared.sheet(UINavigationController(rootViewController: SettingsHostController(...)), from: self)
+AppRouter.shared.sheet(SomeHostController(...), from: self, detents: [.medium()])
+AppRouter.shared.sheet(SomeHostController(...), from: self, detents: [.medium(), .large()])
 
 // 後退（自動判斷：sheet → dismiss，其他 → pop）
 AppRouter.shared.back(from: self)
