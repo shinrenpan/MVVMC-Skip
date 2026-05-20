@@ -225,6 +225,9 @@ AppRouter.shared.backToRoot(from: self)
 
 // 切換 Tab
 AppRouter.shared.tab(1, from: self)
+
+// Deeplink（fullScreen present from rootVC，自動注入 Close button，不需要 from:）
+AppRouter.shared.deeplink(SomeHostController(...))
 ```
 
 `SceneDelegate` 設定：
@@ -236,6 +239,88 @@ window.backgroundColor = .systemBackground  // 避免轉場黑背景
 ```
 
 AppRouter 會在第一次 `to()` 時自動設定 `nav.delegate` 與手勢處理，不需要額外 register / setup。
+
+---
+
+## Deeplink / Push Notification
+
+### Deeplink enum
+
+所有 deeplink 知識集中在 `Sources/App/Deeplink.swift`：URL 解析 + VC 建立，新增 target 只改這一個檔案。
+
+```swift
+enum Deeplink {
+  case settings
+  case postDetail(id: Int)
+
+  init?(url: URL) {
+    guard url.scheme == "mvvmc" else { return nil }
+    switch url.host {
+    case "settings": self = .settings
+    case "posts":
+      guard let id = url.pathComponents.dropFirst().first.flatMap(Int.init) else { return nil }
+      self = .postDetail(id: id)
+    default: return nil
+    }
+  }
+
+  @MainActor func makeHostController() -> UIViewController {
+    switch self {
+    case .settings:           return SettingsHostController(viewModel: .init())
+    case let .postDetail(id): return PostDetailHostController(id: id, ...)
+    }
+  }
+}
+```
+
+### SceneDelegate 三個入口
+
+```swift
+// 前景 / 背景 → URL Scheme
+func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    guard let url = URLContexts.first?.url,
+          let deeplink = Deeplink(url: url) else { return }
+    AppRouter.shared.deeplink(deeplink.makeHostController())
+}
+
+// Cold start → URL Scheme
+// makeKeyAndVisible() 之後才呼叫，確保 rootVC 已存在
+if let url = connectionOptions.urlContexts.first?.url,
+   let deeplink = Deeplink(url: url) {
+    AppRouter.shared.deeplink(deeplink.makeHostController())
+}
+
+// 推播點擊（所有狀態）→ nonisolated，Task @MainActor 跳回 main
+nonisolated func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+) {
+    defer { completionHandler() }
+    guard let urlString = response.notification.request.content.userInfo["deeplink"] as? String,
+          let url = URL(string: urlString),
+          let deeplink = Deeplink(url: url) else { return }
+    Task { @MainActor in AppRouter.shared.deeplink(deeplink.makeHostController()) }
+}
+```
+
+### 推播 payload 約定
+
+```json
+{ "deeplink": "mvvmc://settings" }
+{ "deeplink": "mvvmc://posts/1" }
+```
+
+`Deeplink(url:)` 直接複用，不需要另外寫解析邏輯。
+
+### URL Scheme 設定（project.yml）
+
+```yaml
+CFBundleURLTypes:
+  - CFBundleURLName: com.your.bundle.id
+    CFBundleURLSchemes:
+      - mvvmc
+```
 
 ---
 
