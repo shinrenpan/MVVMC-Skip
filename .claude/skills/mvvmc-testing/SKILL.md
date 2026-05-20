@@ -1,0 +1,187 @@
+---
+name: mvvmc-testing
+description: |
+  MVVMC 單元測試規範。涉及為 ViewModel 撰寫、審查、重構測試時觸發。核心哲學：透過 doAction(.apiResponse(...)) 直接注入結果，不需要 protocol 或 mock class。
+---
+
+# MVVMC Testing Skill
+
+你是一位資深 iOS 工程師，專注於 MVVMC 架構下的單元測試策略。
+
+---
+
+## 設計哲學
+
+**不需要 protocol，不需要 mock class。**
+
+MVVMC 的 `doAction(.apiResponse(...))` 本身就是天然的測試注入點：
+
+```swift
+// 不走 API，直接注入結果
+await vm.doAction(.apiResponse(.fetchUser(.success(dto))))
+await vm.doAction(.apiResponse(.fetchUser(.failure(.message("Not found")))))
+```
+
+這樣做的好處：
+- 零額外抽象：不需要為了測試引入 protocol / dependency injection 框架
+- 測試意圖清晰：直接驗證「給定這個 API 回應，state 變成什麼」
+- Feature 變動快時，只有 Action enum 改動，測試跟著改即可
+
+---
+
+## 測試結構
+
+### 基本格式
+
+```swift
+import Testing
+@testable import AppModule
+
+@MainActor
+struct FeatureViewModelTests {
+
+  @Test
+  func `isFirstAppear guard blocks duplicate trigger`() async {
+    let vm = FeatureViewModel()
+    vm.state.isFirstAppear = false
+    await vm.doAction(.view(.isFirstAppear))
+    #expect(vm.state.api.fetchItems == .prepare)
+  }
+}
+```
+
+- `import Testing`（Swift Testing framework，iOS 17+）
+- `@testable import` 對應 app module 名稱
+- `@MainActor` 標注在 struct 層級，覆蓋所有 test func
+- 每個 `@Test` func 都是 `async`
+
+### 測試命名（Swift 6.2 raw identifier）
+
+使用反引號包裹完整描述句，不需要 `@Test("...")`：
+
+```swift
+// ✅ Swift 6.2 raw identifier
+@Test
+func `fetchUser success sets user state`() async { ... }
+
+// ❌ 舊寫法，避免使用
+@Test("fetchUser success sets user state")
+func testFetchUserSuccess() async { ... }
+```
+
+Raw identifier 格式：`描述主語` + `條件/輸入` + `預期結果`
+
+---
+
+## 三類測試情境
+
+### 1. Guard 邏輯（防重複觸發）
+
+驗證 `isFirstAppear` guard 正確阻擋重複呼叫：
+
+```swift
+@Test
+func `isFirstAppear guard blocks duplicate trigger`() async {
+  let vm = FeatureViewModel()
+  vm.state.isFirstAppear = false       // 模擬已出現過
+  await vm.doAction(.view(.isFirstAppear))
+  #expect(vm.state.api.fetchItems == .prepare)  // state 沒有變動
+}
+```
+
+### 2. apiResponse 注入（成功 / 失敗）
+
+直接注入 API 結果，驗證 state 更新：
+
+```swift
+@Test
+func `fetchItems success populates items`() async {
+  let vm = FeatureViewModel()
+  let dtos: [FeatureViewModel.ItemDTO] = [
+    .init(id: 1, name: "Item A"),
+    .init(id: 2, name: "Item B"),
+  ]
+  await vm.doAction(.apiResponse(.fetchItems(.success(dtos))))
+  #expect(vm.state.items.count == 2)
+  #expect(vm.state.items[0].name == "Item A")
+  #expect(vm.state.api.fetchItems == .success)
+}
+
+@Test
+func `fetchItems failure sets error status`() async {
+  let vm = FeatureViewModel()
+  await vm.doAction(.apiResponse(.fetchItems(.failure(.message("Network error")))))
+  #expect(vm.state.items.isEmpty)
+  #expect(vm.state.api.fetchItems == .error("Network error"))
+}
+```
+
+### 3. Callback 驗證
+
+驗證 `onCallback` 是否以正確參數被呼叫：
+
+```swift
+@Test
+func `didSelectUser calls correct callback`() async {
+  let vm = FeatureViewModel()
+  var received: FeatureViewModel.Callback?
+  vm.onCallback = { received = $0 }
+
+  let user = FeatureViewModel.User(id: 2)
+  await vm.doAction(.view(.didSelectUser(user)))
+  #expect(received == .didSelectUser(user))
+}
+```
+
+---
+
+## 什麼值得測試
+
+| 情境 | 測試方式 |
+|------|----------|
+| Guard 邏輯（isFirstAppear、防重入） | 設定 state 後觸發 action，驗證 state 未變 |
+| API 成功路徑 | 注入 `.success(dto)`，驗證 state 欄位正確 |
+| API 失敗路徑 | 注入 `.failure(.message(...))`，驗證 error status |
+| Callback 觸發 | 設定 `onCallback` closure，驗證回傳值 |
+| State 欄位計算 | 直接操作 state，驗證 computed property |
+
+## 什麼不值得測試
+
+| 情境 | 原因 |
+|------|------|
+| 實際 API 網路呼叫 | 非確定性、速度慢，交給整合測試 |
+| SwiftUI View render | UI 測試範疇，非單元測試 |
+| HostController 導航 | 依賴 UIKit 環境，不在單元測試範圍 |
+| `onRoute` 是否被呼叫 | 屬於整合測試，驗證導航意圖即可 |
+
+---
+
+## 三種任務模式
+
+### 模式 A：為現有 ViewModel 補測試
+
+1. 讀取 `*ViewModel.swift` 和 `*ViewModel+Models.swift`
+2. 識別所有 `ViewAction`、`APIResponse` case
+3. 依照上方三類情境，為每個 case 生成對應測試
+
+### 模式 B：審查現有測試
+
+```
+### 測試審查報告
+
+✅ 符合規範：
+- ...
+
+❌ 問題項目：
+| 位置 | 問題 | 建議修正 |
+|------|------|----------|
+
+⚠️ 灰色地帶：
+- ...
+```
+
+### 模式 C：重構現有測試
+
+1. 先輸出審查報告（同模式 B）
+2. 輸出重構後完整測試代碼
+3. 附上說明，列出每項改動對應的規範

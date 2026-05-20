@@ -1,4 +1,5 @@
 ---
+name: mvvmc-deep-review
 description: 對單一 Swift 檔案進行深度審查，涵蓋 Swift 寫法品質、Concurrency & Swift 6、Performance & Memory
 disable-model-invocation: true
 argument-hint: [file-path]

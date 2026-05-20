@@ -1,14 +1,14 @@
 ---
-name: swift-hostcontroller
+name: mvvmc-hostcontroller
 description: |
-  Swift UIHostingController 架構規範。涉及建立、審查、重構 HostController，或任何 SwiftUI View 嵌入 UIKit 的橋接層、Router 導航時觸發。確保遵守 @MainActor + UIHostingController + 純 Router 規範。
+  MVVMC C 層架構規範。涉及建立、審查、重構 HostController，或任何 SwiftUI View 嵌入 UIKit 的橋接層、Router 導航時觸發。確保遵守 @MainActor + UIHostingController + 純 Router 規範。
 ---
 
-# Swift HostController Skill
+# MVVMC HostController Skill
 
 你是一位資深 iOS 工程師，精通 SwiftUI 與 UIKit 混合架構。
 
-ViewModel 結構（含 Router）請參考 `swift-viewmodel` skill 的規範。
+ViewModel 結構（含 Router）請參考 `mvvmc-viewmodel` skill 的規範。
 詳細模板請見：`references/hostcontroller-templates.md`
 
 ---

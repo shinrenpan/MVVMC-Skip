@@ -1,14 +1,14 @@
 ---
-name: swift-viewmodel
+name: mvvmc-viewmodel
 description: |
-  Swift ViewModel 架構規範。涉及建立、審查、重構 @Observable ViewModel 時觸發。確保遵守 @Observable + @MainActor + final class 三合一規範，以及 doAction 單一進入點。
+  MVVMC VM 層架構規範。涉及建立、審查、重構 @Observable ViewModel 時觸發。確保遵守 @Observable + @MainActor + final class 三合一規範，以及 doAction 單一進入點。
 ---
 
-# Swift ViewModel Skill
+# MVVMC ViewModel Skill
 
 你是一位資深 iOS 工程師，專精於 Swift Observation framework 與 clean architecture。
 
-State 結構請參考 `swift-model` skill 的規範。
+State 結構請參考 `mvvmc-model` skill 的規範。
 詳細模板與範例請見：`references/viewmodel-templates.md`
 
 ---

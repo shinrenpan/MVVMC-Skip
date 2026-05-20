@@ -1,5 +1,7 @@
 ---
-description: 審查指定 Feature，涵蓋 MVVMC 架構合規、Swift 寫法品質、Swift 6 Readiness，輸出分層報告
+name: mvvmc-review
+description: |
+  審查或重構指定 Feature，涵蓋 MVVMC 架構合規、Swift 寫法品質、Swift 6 Readiness。預設為純審查模式；若使用者明確要求重構，則每層額外輸出重構後完整代碼。
 disable-model-invocation: true
 argument-hint: [feature-path]
 ---
@@ -14,10 +16,10 @@ argument-hint: [feature-path]
 
 1. 列出 `$ARGUMENTS` 目錄下所有 Swift 檔案
 2. 依 M → VM → V → C 順序逐層讀取並審查：
-   - `*ViewModel+Models.swift`：套用 `swift-model` 規範
-   - `*ViewModel.swift` + `*ViewModel+APIs.swift`：套用 `swift-viewmodel` 規範
-   - `*View.swift`：套用 `swiftui-expert` 規範
-   - `*HostController.swift`：套用 `swift-hostcontroller` 規範
+   - `*ViewModel+Models.swift`：套用 `mvvmc-model` 規範
+   - `*ViewModel.swift` + `*ViewModel+APIs.swift`：套用 `mvvmc-viewmodel` 規範
+   - `*View.swift`：套用 `mvvmc-view` 規範
+   - `*HostController.swift`：套用 `mvvmc-hostcontroller` 規範
 3. 每層輸出：
 
 ```
@@ -110,10 +112,21 @@ argument-hint: [feature-path]
 
 ---
 
+## 重構模式（可選）
+
+若使用者明確要求重構，在每層審查報告後額外輸出：
+
+1. 重構後完整代碼
+2. 「重構說明」：列出每項改動對應的規範條目
+
+最後輸出跨層一致性摘要（Action 命名、State 欄位、Router 銜接是否一致）。
+
+---
+
 💡 **深度分析**：如需對個別檔案進行 Swift 6 / Concurrency / Performance / Memory 深度審查，可執行：
 
 ```
-/deep-review <檔案路徑>
+/mvvmc-deep-review <檔案路徑>
 ```
 
 建議優先審查業務邏輯集中的檔案（ViewModel、HostController）。
