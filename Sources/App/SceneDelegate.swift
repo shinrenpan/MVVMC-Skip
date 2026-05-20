@@ -31,5 +31,10 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window.backgroundColor = .systemBackground
     window.makeKeyAndVisible()
     self.window = window
+
+    if let url = connectionOptions.urlContexts.first?.url,
+       let deeplink = Deeplink(url: url) {
+      AppRouter.shared.deeplink(deeplink.makeHostController())
+    }
   }
 }
