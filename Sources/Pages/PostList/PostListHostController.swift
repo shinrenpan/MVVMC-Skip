@@ -29,7 +29,7 @@ private extension PostListHostController {
       AppRouter.shared.to(PostDetailHostController(id: post.id, title: post.title, body: post.body), from: self)
 
     case let .toUserDetail(userId):
-      AppRouter.shared.to(UserDetailHostController(userId: userId), from: self)
+      AppRouter.shared.to(UserDetailHostController(userId: userId), from: self, style: .fade)
 
     case .toFilter:
       let filterVM = PostFilterViewModel()

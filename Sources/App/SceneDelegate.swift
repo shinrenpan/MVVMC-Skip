@@ -13,6 +13,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     let nav = UINavigationController(rootViewController: PostListHostController(viewModel: .init()))
     let window = UIWindow(windowScene: windowScene)
     window.rootViewController = nav
+    window.backgroundColor = .systemBackground
     window.makeKeyAndVisible()
     self.window = window
   }
