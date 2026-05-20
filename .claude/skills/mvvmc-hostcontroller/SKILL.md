@@ -89,13 +89,16 @@ final class PostDetailHostController: UIHostingController<PostDetailView> {
 - ✅ `viewDidLoad` 設定 `viewModel.onRoute`，監聽導航意圖
 - ✅ `onRoute` closure 用 `[weak self]`
 - ✅ 導航邏輯集中在 `handleRouter(_:)`
-- ❌ 禁止 ViewModel 直接持有 UIViewController 或做 push/pop
+- ✅ 所有導航透過 `AppRouter.shared`（`to / back / backTo / backToRoot`）
+- ❌ 禁止直接呼叫 `navigationController?.pushViewController` / `present` / `dismiss`
+- ❌ 禁止 ViewModel 直接持有 UIViewController 或做導航
 - ❌ 不需要 `viewDidDisappear` 清空 closure（ViewModel 由 HostController 持有，`[weak self]` 已足夠）
 
-**onCallback 規範（Modal 回傳）：**
-- ✅ present 子 VC 前，先設定子 ViewModel 的 `onCallback`
+**onCallback 規範（跨 VC 回傳）：**
+- ✅ 導航子 VC 前，先設定子 ViewModel 的 `onCallback`
 - ✅ `onCallback` 是 `async` closure，直接 `await`，不需包 `Task`
-- ✅ `[weak self]` 避免循環引用
+- ✅ `[weak self]` + `guard let self` 避免循環引用與 optional chaining
+- ✅ 回傳後透過 `AppRouter.shared.back(from: self)` 返回，不用 `dismiss`
 
 **init 規範：**
 - ✅ `required init?(coder:)` 標記 `@available(*, unavailable)` + `fatalError`
@@ -114,7 +117,8 @@ final class PostDetailHostController: UIHostingController<PostDetailView> {
 ---
 ### 架構說明
 - **命名一致性**：Feature prefix 對應關係
-- **ViewModel 持有**：預設外部注入 or 內部建立
+- **ViewModel 持有**：預設外部注入 or 內部建立（跨 feature 傳 primitive 時在 C 層組裝）
+- **AppRouter 使用**：列出所有 to / back 呼叫對應的導航情境
 ```
 
 ### 模式 B：審查現有 HostController
