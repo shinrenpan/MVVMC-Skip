@@ -166,7 +166,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   Path A wins on the *iOS-side* architectural-preservation axis (the entry chain is unchanged: `UIApplicationMain` → `AppDelegate` → `SceneDelegate` → `UITabBarController` → HostControllers, exactly as in the MVVMC baseline) AND on the *change-set size* axis (about 20 lines of edits vs Path E's dozens of access-modifier additions). Path B was rejected because rewriting the lifecycle entry point goes beyond the "minimal, necessary" budget set in M5.
 - **Verification**: `xcodebuild -project Darwin/MVVMCSkipDemo.xcodeproj -scheme "MVVMCSkipDemo App" -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build` → **`** BUILD SUCCEEDED **`**. This is the **first iOS `.app` bundle ever produced by this repo's Skip-aware layout** — previous green builds were the library framework, not a launchable app.
 
-### M8 — `Project.xcworkspace` at repo root + `skip app launch --ios` verified (this commit)
+### M8 — `Project.xcworkspace` at repo root + `skip app launch --ios` verified (commit `7558842`)
 - **What**:
   - Added `Project.xcworkspace/contents.xcworkspacedata` at the repo root, with a single `FileRef` pointing at `Darwin/MVVMCSkipDemo.xcodeproj`. The xcodeproj already references the local SPM package at `..`, so the workspace transitively sees `Package.swift` without a separate `FileRef`.
   - `.gitignore` cleanup: removed the now-obsolete `*.xcodeproj/project.pbxproj` entry (XcodeGen-era — it would silently ignore the real, tracked `Darwin/MVVMCSkipDemo.xcodeproj/project.pbxproj` if someone re-cloned).
@@ -176,6 +176,16 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - **`skip app launch --ios --plain` → `[✓] Launch Skip app succeeded in 2.6s`**.
   - `xcrun simctl listapps booted` confirms `com.joe.mvvmc.demo` is installed on the booted iPhone 17 simulator with a real `.app` bundle.
   - Simulator screenshot confirms the app renders the existing MVVMC `PostList` screen with `Posts` / `Profile` tab bar — i.e. `AppDelegate → SceneDelegate → UITabBarController → UINavigationController → PostListHostController → PostListView` chain works end-to-end through the new SPM-as-source-of-truth layout. The iOS-side behaviour is identical to the MVVMC baseline.
+
+### M9 — `Android/` shell + expected-failure verification (this commit)
+- **What**:
+  - Copied the Android/ scaffold from a fresh `skip init --transpiled-app MVVMCSkipDemo` probe: `app/build.gradle.kts`, `app/src/main/AndroidManifest.xml`, `app/src/main/kotlin/Main.kt` (the Skip-canonical `AndroidAppMain` + `MainActivity`), `app/src/main/res/mipmap-*` launcher icons, `gradle/wrapper/gradle-wrapper.properties`, `gradle.properties`, `settings.gradle.kts`. Dropped `fastlane/`.
+  - Updated `Darwin/MVVMCSkipDemo.xcconfig` comment: `SKIP_ACTION` stays `none` until Step 7 (plugin binding + first-feature conversion), not Step 6 as the previous comment claimed. The reason is now precise: with the plugin unbound, no transpiled Kotlin module exists for `MVVMCSkipDemo`, so `gradle launchDebug` would fail mid-build, not at startup.
+- **Why**: Android needs a real `app/` Gradle subproject with `Main.kt`, manifest, and launcher icons before Skip's `skip-plugin` can register and run the transpiled module against it. Putting this in place now (rather than bundling with Step 7) keeps the next commit's diff focused on the plugin-binding + ViewModel-rewriting story rather than mixing in pure Gradle scaffolding.
+- **Verification**:
+  - `xcodebuild -workspace Project.xcworkspace -scheme "MVVMCSkipDemo App" -destination 'generic/platform=iOS Simulator' build` → `** BUILD SUCCEEDED **` (iOS path unchanged).
+  - `cd Android && gradle :app:assembleDebug` → fails with the expected `e: Could not locate transpiled module for MVVMCSkipDemo in .../.build/plugins/outputs`. This is the exact failure mode the original Plan predicted for "skip app launch --android" at this stage: shell present, gradle invokable, blocked only on the missing Skip-plugin output. **This failure is the start signal for Step 7.**
+  - `skip app launch --android` *does not yet* exercise this code path because `SKIP_ACTION=none` short-circuits the iOS-xcodebuild's gradle phase to a noop. The honest "Android does not yet build" demonstration comes from running gradle directly, as documented above.
 
 ---
 
@@ -188,7 +198,7 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
 3. ~~**Restructure `Sources/Pages/` → `Sources/MVVMCSkipDemo/Pages/`** + module rename to `MVVMCSkipDemo`.~~ ✅ Done in M6.
 4. ~~**Add `Darwin/` shell**~~ ✅ Done in M7.
 5. ~~**Add `Project.xcworkspace`** at repo root + verify `skip app launch --ios`.~~ ✅ Done in M8.
-6. **Add `Android/` shell** — Gradle scaffolding, `Main.kt` entry, `settings.gradle.kts`. At this point `skip app launch --android` will not yet succeed (plugin still unbound); that's expected.
+6. ~~**Add `Android/` shell**~~ ✅ Done in M9. `gradle :app:assembleDebug` fails with the expected "Could not locate transpiled module for MVVMCSkipDemo" — the start signal for Step 7.
 7. **First real Skip adaptation — bind plugin + convert one feature end-to-end**:
    1. Bind the `skipstone` plugin to the `MVVMCDemo` target in `Package.swift`.
    2. Wrap `AppDelegate`, `SceneDelegate`, `AppRouter`, `Deeplink`, and *all* `*HostController.swift` files in `#if !SKIP` (mechanical file-level wrap; no logic edits).
