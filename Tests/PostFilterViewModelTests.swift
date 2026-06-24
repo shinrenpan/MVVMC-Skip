@@ -1,5 +1,5 @@
 import Testing
-@testable import MVVMCDemo
+@testable import MVVMCSkipDemo
 
 @MainActor
 struct PostFilterViewModelTests {

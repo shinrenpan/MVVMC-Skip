@@ -3,11 +3,11 @@
 import PackageDescription
 
 let package = Package(
-  name: "MVVMCDemo",
+  name: "MVVMCSkipDemo",
   defaultLocalization: "en",
   platforms: [.iOS(.v17), .macOS(.v14)],
   products: [
-    .library(name: "MVVMCDemo", type: .dynamic, targets: ["MVVMCDemo"]),
+    .library(name: "MVVMCSkipDemo", type: .dynamic, targets: ["MVVMCSkipDemo"]),
   ],
   dependencies: [
     .package(url: "https://source.skip.tools/skip.git", from: "1.9.3"),
@@ -19,19 +19,19 @@ let package = Package(
     // wrapping + ViewModel rewrites, so iOS xcodebuild stays green throughout.
     // See Migration Log M5 for the reasoning.
     .target(
-      name: "MVVMCDemo",
+      name: "MVVMCSkipDemo",
       dependencies: [
         .product(name: "SkipUI", package: "skip-ui"),
       ],
-      path: "Sources",
+      path: "Sources/MVVMCSkipDemo",
       exclude: [
         "App/Info.plist",
       ]
     ),
     .testTarget(
-      name: "MVVMCDemoTests",
+      name: "MVVMCSkipDemoTests",
       dependencies: [
-        "MVVMCDemo",
+        "MVVMCSkipDemo",
         .product(name: "SkipTest", package: "skip"),
       ],
       path: "Tests"

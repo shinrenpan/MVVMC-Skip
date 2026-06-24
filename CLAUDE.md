@@ -135,6 +135,15 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `skip doctor` → `Skip 1.9.3 doctor succeeded`.
   - The plugin wiring + per-feature `#if !SKIP` wrapping + ViewModel rewrites that we explored mid-session were intentionally reverted; the in-tree changes here are only the scaffold + the one concurrency fix.
 
+### M6 — Module rename to `MVVMCSkipDemo` + Skip-canonical source layout (this commit)
+- **What**:
+  - `git mv Sources/{App,Pages,Shared,Skip} Sources/MVVMCSkipDemo/` — every existing source file moved one directory deeper. No file content edits.
+  - `Package.swift`: target / product / library names `MVVMCDemo` → `MVVMCSkipDemo`; target `path` `Sources` → `Sources/MVVMCSkipDemo`.
+  - `Skip.env`: `PRODUCT_NAME` and reference comment updated to `MVVMCSkipDemo`.
+  - `Tests/*.swift`: `@testable import MVVMCDemo` → `@testable import MVVMCSkipDemo` (3 files).
+- **Why**: Skip Lite's transpiler keys off the SPM target's `path`, and its plugin looks for `<targetPath>/Skip/skip.yml` relative to that path. With the source tree at `Sources/`, the implicit module name didn't match the eventual product name (`MVVMCSkipDemo`), and a future binding of the `skipstone` plugin would have looked for `Sources/Skip/skip.yml` — which is awkward because it sits next to feature folders rather than belonging to one module. Promoting everything into `Sources/MVVMCSkipDemo/` makes (a) the SPM module name, (b) the on-disk folder name, (c) `Skip.env`'s `PRODUCT_NAME`, and (d) `@testable import` all agree — which is what Skip's tooling assumes when it later generates `Darwin/MVVMCSkipDemo.xcconfig` and `Android/settings.gradle.kts` from `Skip.env`. This step is pure scaffolding: zero feature-code edits, every file's git history preserved through `git mv`.
+- **Verification**: `xcodebuild -scheme MVVMCSkipDemo -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build` → `** BUILD SUCCEEDED **`. (Note: scheme name auto-updated by SPM to track the renamed product; no manual scheme edit needed.)
+
 ---
 
 ## Next Steps (start here in the next session)
@@ -143,7 +152,7 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
 
 1. ~~**Add `Package.swift` pointing at existing `Sources/` paths**~~ ✅ Done in M4.
 2. ~~**Add Skip scaffold** — `Skip.env`, `Sources/Skip/skip.yml`, swift-tools 6.1, skip / skip-ui deps. Plugin binding deferred to Step 7.~~ ✅ Done in M5.
-3. **Restructure `Sources/Pages/` → `Sources/MVVMCSkipDemo/Pages/`** — `git mv` plus the matching target rename in `Package.swift`, `Skip.env`'s `PRODUCT_NAME`, and `@testable import MVVMCDemo` in `Tests/`. Treated as scaffolding rename — no feature-code semantics change.
+3. ~~**Restructure `Sources/Pages/` → `Sources/MVVMCSkipDemo/Pages/`** + module rename to `MVVMCSkipDemo`.~~ ✅ Done in M6.
 4. **Add `Darwin/` shell** — `Info.plist`, `Main.swift` (`@main` entry that wraps `SceneDelegate` for iOS), Assets, `MVVMCSkipDemo.xcconfig`, `MVVMCSkipDemo.xcodeproj`. Retire the broken `MVVMCDemo.xcodeproj` shell + `project.yml`.
 5. **Add `Project.xcworkspace`** at repo root referencing `Package.swift` + `Darwin/MVVMCSkipDemo.xcodeproj`. Verify `skip app launch --ios` boots a real device/simulator build with the actual UIKit app running.
 6. **Add `Android/` shell** — Gradle scaffolding, `Main.kt` entry, `settings.gradle.kts`. At this point `skip app launch --android` will not yet succeed (plugin still unbound); that's expected.
