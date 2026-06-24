@@ -288,7 +288,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `skip app launch --ios --plain` → `[✓] Launch Skip app succeeded in 8.8s`. iOS behaviour confirmed unchanged after the V/VM edits.
   - All four touched files preserve their original control-flow semantics (verified by inspection of pre/post diffs and by iOS app continuing to render correctly).
 
-### M13 — Step 7d: Android renders Settings (this commit)
+### M13 — Step 7d: Android renders Settings (commit `e4e934a`)
 - **What**:
   - Added `Sources/MVVMCSkipDemo/Android/AppEntry.swift` (wrapped `#if SKIP`) declaring two `public` types that `Android/app/src/main/kotlin/Main.kt` resolves via `typealias`:
     - `MVVMCSkipDemoRootView` — Android root view; for Step 7d simply wraps `SettingsView` in a `NavigationStack`.
@@ -343,6 +343,18 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
 
   **Total ≈ 100 lines edited across ~22 files**. `MVVMC` architecture (M / VM / V / C separation, `doAction` single-entry-point, `Router` enums, `@Observable` ViewModel, UIKit `HostController` C-layer) **unchanged**. The Settings feature renders on both iOS (UIKit-native) and Android (Skip-transpiled Compose) **from the same Swift source**.
 
+### M14 — Step 8a: PostFilter ports to Android (this commit)
+- **What**:
+  - Unwrapped `Sources/MVVMCSkipDemo/Pages/PostFilter/PostFilterView.swift` from `#if !SKIP` (added back in M13 deferral).
+  - Applied **idiom #6** (qualify nested enum at call site) to all three `doAction` sites in `PostFilterView` — `.view(.showAll)` → `.view(PostFilterViewModel.ViewAction.showAll)`, etc.
+  - Grew `MVVMCSkipDemoRootView` (Android-only, `Sources/MVVMCSkipDemo/Android/AppEntry.swift`) from a single `SettingsView` to a `NavigationStack` + `List` index with `NavigationLink`s into each ported feature. PostFilter is the second row.
+- **Why**: First per-feature port after the Step 7d scaffolding. PostFilter is the simplest feature with `.view(...)` call sites (Settings only had one — `.close`). Three sites in PostFilter exercises idiom #6 enough times to verify the pattern is mechanical and stable across a real feature surface.
+- **Verification**:
+  - `skip app launch --android --plain` → `[✓] Launch Skip app succeeded in 11.28s`.
+  - Pixel 9 screenshots at `articles/images/step8a-android-root.png` (the new feature-index root) and `articles/images/step8a-android-filter.png` (PostFilter screen with `Cancel` toolbar, `Filter by User` title, `Show All` + `User 1`–`User 5` rows correctly rendered, including idiom #7's `User(id: $0)` fix being exercised at runtime).
+  - `skip app launch --ios --plain` → `Launch Skip app succeeded in 10.71s`. iOS PostList tab + UITabBarController unchanged.
+  - `PostFilterView`'s edits are 3 idiom-#6 qualifications, ~3 lines net change. PostFilter feature surface (VM, View, Models) keeps its MVVMC shape intact.
+
 ---
 
 ## Next Steps (start here in the next session)
@@ -360,7 +372,12 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
    - **7b** — Wrap all `*HostController.swift` + UIKit-only App-layer files in `#if !SKIP`. ✅ Done in M11. Discovered the frontier moves to a *View* (`case where`), not a VM as M5 predicted.
    - **7c** — Fix Skip-transpile issues in the order Skip surfaces them, until the entire `MVVMCSkipDemo` module transpiles. ✅ Done in M12. Four rebuilds, four fixes, in two files each of V/VM (UserDetail + PostList). The four other features needed no edits.
    - **7d** — Add Android root view + wire `Main.kt` + flip `SKIP_ACTION`. ✅ Done in M13. **Settings renders on Pixel 9 emulator** (`articles/images/m13-android-settings.png`). Five other features `#if !SKIP`-walled, deferred to Step 8+.
-8. **Per-feature Android conversion** — one commit per feature: tackle that feature's Kotlin compile issues (qualifying nested enums, replacing `ContentUnavailableView`, dealing with platform-specific API calls like `UIApplication.shared.open` and `UNUserNotificationCenter`), unwrap it on Android, expand the Android `MVVMCSkipDemoRootView` to include the feature. Suggested order by complexity: `PostFilter` → `PostList` → `Profile` (deeplinks) → `UserDetail` (API + ContentUnavailableView) → `PostDetail` (then root becomes a full tab bar).
+8. **Per-feature Android conversion** — one commit per feature:
+   - **8a** — PostFilter. ✅ Done in M14.
+   - **8b** — PostList. Will need to replace/wrap `ContentUnavailableView` + multiple `.view(...)` qualifier sites.
+   - **8c** — Profile. Has `UIApplication.shared.open` (deeplink) and `UNUserNotificationCenter` (push); needs Android-side substitutions or further `#if !SKIP` walls.
+   - **8d** — UserDetail. API + `ContentUnavailableView`.
+   - **8e** — PostDetail. After this, root can switch from feature-list to a TabView mirroring iOS.
 8. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
 
 Each step's `Why:` and any gotchas land back in the Migration Log above as they happen.

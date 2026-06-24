@@ -13,14 +13,26 @@
 #if SKIP
 import SwiftUI
 
-/// The Android root view. Step 7d renders only `Settings` as a proof of life;
-/// later steps will mirror iOS's `Posts` / `Profile` tab structure.
+/// The Android root view. Starts as a flat index that lists each
+/// successfully-ported feature; each Step 8 commit appends one
+/// `NavigationLink` row. When the full MVVMC tab-bar surface is ported, the
+/// root can switch to a `TabView` mirroring iOS's `Posts` / `Profile` tabs.
 public struct MVVMCSkipDemoRootView: View {
   public init() {}
 
   public var body: some View {
     NavigationStack {
-      SettingsView(viewModel: SettingsViewModel())
+      List {
+        Section("Ported features") {
+          NavigationLink("Settings") {
+            SettingsView(viewModel: SettingsViewModel())
+          }
+          NavigationLink("Filter by User") {
+            PostFilterView(viewModel: PostFilterViewModel())
+          }
+        }
+      }
+      .navigationTitle("MVVMC × Skip")
     }
   }
 }

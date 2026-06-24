@@ -1,4 +1,3 @@
-#if !SKIP
 import SwiftUI
 
 struct PostFilterView: View {
@@ -7,11 +6,11 @@ struct PostFilterView: View {
   var body: some View {
     List {
       Button("Show All") {
-        Task { await viewModel.doAction(.view(.showAll)) }
+        Task { await viewModel.doAction(.view(PostFilterViewModel.ViewAction.showAll)) }
       }
       ForEach(viewModel.state.users) { user in
         Button(user.displayName) {
-          Task { await viewModel.doAction(.view(.didSelectUser(user))) }
+          Task { await viewModel.doAction(.view(PostFilterViewModel.ViewAction.didSelectUser(user))) }
         }
       }
     }
@@ -20,7 +19,7 @@ struct PostFilterView: View {
     .toolbar {
       ToolbarItem(placement: .cancellationAction) {
         Button("Cancel") {
-          Task { await viewModel.doAction(.view(.cancel)) }
+          Task { await viewModel.doAction(.view(PostFilterViewModel.ViewAction.cancel)) }
         }
       }
     }
@@ -31,5 +30,4 @@ struct PostFilterView: View {
 #Preview {
   PostFilterView(viewModel: PostFilterViewModel())
 }
-#endif
 #endif
