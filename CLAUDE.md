@@ -63,11 +63,15 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
 - **What**: README / README.en / CLAUDE.md rewritten to declare this repo's specific promise — "MVVMC + `#if SKIP`, iOS zero-change".
 - **Why**: Avoid the trap MVVMR-Skip fell into (started as "MVVMC + Skip" but actually evolved into a different architecture). Stating the promise explicitly up front lets future commits be measured against it.
 
-### M3 — Route B chosen for project layout (this commit)
+### M3 — Route B chosen for project layout (commit `49753a6`)
 - **What**: Decided to migrate from `XcodeGen + Sources/Pages/` to the Skip Lite convention (`Package.swift` + `Sources/MVVMCSkipDemo/Pages/` + `Darwin/` + `Android/`). XcodeGen will be retired.
 - **Why**: Skip transpiler assumes SPM as the source-of-truth. Running XcodeGen alongside SPM creates a dual-track that fights Skip's implicit expectations (the path MVVMR-Skip discovered the hard way before eventually retiring XcodeGen in its own Commit 3).
 - **Scope clarification**: "iOS zero-change" applies to **feature code content** (M/VM/V/C `.swift` files in `Pages/`). Project scaffolding (`Package.swift`, `Skip.env`, `Darwin/`, `Android/`, `Project.xcworkspace`) is necessarily new. File **locations** may move; **contents** do not.
-- **Not yet done**: actual migration. This entry records the decision; execution is the next session's first task.
+
+### M4 — `Package.swift` added as SPM source-of-truth (this commit)
+- **What**: Added a minimal `Package.swift` (swift-tools 5.10, iOS 17) declaring one library target `MVVMCDemo` with `path: "Sources"` (excluding `App/Info.plist`) and a matching `MVVMCDemoTests` target at `Tests/`. Also gitignored `.swiftpm/`.
+- **Why**: Step 1 of the Route B migration — prove SPM can see the existing iOS code without any content changes, before any Skip tooling enters the picture. Target name kept as `MVVMCDemo` (not yet `MVVMCSkipDemo`) so the existing `@testable import MVVMCDemo` in `Tests/` stays valid; the rename will happen together with the `git mv` to `Sources/MVVMCSkipDemo/` in Step 3.
+- **Verification**: `swift build` alone fails (defaults to macOS SDK → `UIKit` missing), as expected. `xcodebuild -scheme MVVMCDemo -destination 'generic/platform=iOS Simulator' build` succeeds — `** BUILD SUCCEEDED **`. The temporarily-stashed empty `MVVMCDemo.xcodeproj` (only `contents.xcworkspacedata` is tracked; `project.pbxproj` is XcodeGen-generated and gitignored) needed to be moved aside during the build so xcodebuild would pick `Package.swift` instead of the broken project shell. The shell is restored and will be retired entirely in Step 4.
 
 ---
 
@@ -75,7 +79,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
 
 Open this repo cold and these are the steps in order. Each step is one commit with a `Why:` paragraph.
 
-1. **Add `Package.swift` pointing at existing `Sources/` paths** — sanity check that SPM can see the existing iOS code unchanged. `swift build` should succeed on iOS host before any Skip work.
+1. ~~**Add `Package.swift` pointing at existing `Sources/` paths**~~ ✅ Done in M4.
 2. **Add Skip plugin to `Package.swift`** + create `Skip.env` (copy MVVMR-Skip's as a template, adjust bundle ID / module name to `MVVMCSkipDemo`). Run `skip doctor`.
 3. **Restructure `Sources/Pages/` → `Sources/MVVMCSkipDemo/Pages/`** — this is a `git mv` only; no file content edits. Update `Package.swift` source paths.
 4. **Add `Darwin/` shell** — `Info.plist`, `Main.swift` (`@main` entry that wraps `SceneDelegate` for iOS), Assets. Retire `MVVMCDemo.xcodeproj` + `project.yml`.
