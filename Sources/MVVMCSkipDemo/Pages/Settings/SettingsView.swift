@@ -14,7 +14,14 @@ struct SettingsView: View {
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
         Button("關閉") {
-          Task { await viewModel.doAction(.view(.close)) }
+          // Skip's transpiler drops the outer-class qualifier when a
+          // nested enum lives in an extension — `.view(.close)` becomes
+          // bare `ViewAction.close` in Kotlin, which doesn't resolve.
+          // Fully qualify both ends so the generated Kotlin uses
+          // `SettingsViewModel.ViewAction.close`.
+          Task {
+            await viewModel.doAction(.view(SettingsViewModel.ViewAction.close))
+          }
         }
       }
     }

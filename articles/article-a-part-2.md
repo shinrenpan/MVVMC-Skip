@@ -4,7 +4,6 @@
 > 重點：把 iOS app 跑起來、建好 Android shell、接上 `skipstone` plugin、跑完 transpile gauntlet、第一次在 Android 看到 MVVMC 畫面。
 > 對應 Migration Log M8–M13。
 
-> ⚠️ **草稿狀態**：M8–M12 段已寫好，M13（Android render + 截圖）+ 結尾盤點段待 7d ship 完補上。
 
 ---
 
@@ -242,45 +241,191 @@ case let .fetchUserDidFinish(result):
 
 ---
 
-## 六、Android 第一次 render（M13）— *placeholder*
+## 六、Android 第一次 render（M13）
 
-> 🚧 待 Step 7d ship 完寫。預計內容：
-> - Android root view 怎麼設計（從 SPM lib 暴露一個 RootView 給 `Main.kt` 用？還是讓 Android 端自己組裝？）
-> - 接到 `Android/app/src/main/kotlin/Main.kt`
-> - `SKIP_ACTION` 翻回 `launch`
-> - `skip app launch --android` 把 emulator 上的 MVVMC 跑出來
-> - Android 截圖（PostList 第一次出現在 Compose 上）
-> - 跟 iOS 截圖並排比較
+「接 root view + flip `SKIP_ACTION` + 跑 launch」——原本計畫是三行。實際上**碰到第二道 gauntlet**。
+
+### 接 root view
+
+Main.kt 透過 typealias 引用兩個 Swift 符號：
+
+```kotlin
+private typealias AppRootView = MVVMCSkipDemoRootView
+private typealias AppDelegate = MVVMCSkipDemoAppDelegate
+```
+
+這兩個型別 lib 裡沒有，要新建。設計約束：**iOS 不該看到**，因為 iOS root 是 SceneDelegate 設定的 UITabBarController；Android root 由 SwiftUI 重組。所以新檔 `Sources/MVVMCSkipDemo/Android/AppEntry.swift` 整檔包 `#if SKIP`：
+
+```swift
+#if SKIP
+public struct MVVMCSkipDemoRootView: View {
+  public init() {}
+  public var body: some View {
+    NavigationStack {
+      SettingsView(viewModel: SettingsViewModel())
+    }
+  }
+}
+
+public final class MVVMCSkipDemoAppDelegate {
+  public static let shared = MVVMCSkipDemoAppDelegate()
+  private init() {}
+  public func onInit() {}
+  public func onLaunch() {}
+  // … onResume / onPause / onStop / onDestroy / onLowMemory
+}
+#endif
+```
+
+第一輪渲染目標：就 `Settings`。其他 feature 之後 Step 8+ 再開。
+
+### 第一道 wall：Android package mismatch
+
+`gradle launchDebug` 立刻噴：
+
+```
+Could not find com.joe.mvvmc.demo:MVVMCSkipDemo:.
+Required by: project ':app'
+```
+
+原因是 M5 時我把 `Skip.env` 的 `ANDROID_PACKAGE_NAME` 設成 `com.joe.mvvmc.demo`（iOS bundle id 同步），但 Skip 期待 `ANDROID_PACKAGE_NAME` 是 **Kotlin package 名**（`mvvmcskip.demo`），跟 iOS bundle id 是兩個概念。Main.kt 的 `package mvvmcskip.demo` 跟 Skip 預設一致，我的 env 變數對不齊。
+
+修：`ANDROID_PACKAGE_NAME = mvvmcskip.demo`，另開 `ANDROID_APPLICATION_ID = com.joe.mvvmc.demo` 保留 app id 對齊 iOS。
+
+### 第二道 wall：Kotlin compile gauntlet
+
+修完 package，gradle 推進到 `compileDebugKotlin`——然後爆出**一整串新類別的錯**。
+
+第一類：**`Unresolved reference 'ViewAction'`**。每個 View 裡的 `viewModel.doAction(.view(.something))` 都中。看 Skip 產出的 Kotlin：
+
+```kotlin
+viewModel.doAction(SettingsViewModel.Action.view(ViewAction.close))
+//                                                ^^^^^^^^^^^ 沒有外層 qualifier
+```
+
+Skip 把外層 `.view` 正確解析成 `SettingsViewModel.Action.view`，**但內層 `.close` 變成裸 `ViewAction.close`**——丟掉了外層 class qualifier。Kotlin 找不到頂層 `ViewAction` 型別，所以解析失敗。
+
+這是 Skip 轉譯器處理 extension 裡的 nested enum 時會犯的問題（class body 裡定義可能沒事，extension 裡會掉）。修法是**在 Swift 端顯式 qualify**：
+
+```swift
+// 從這個
+Task { await viewModel.doAction(.view(.close)) }
+// 改成這個
+Task { await viewModel.doAction(.view(SettingsViewModel.ViewAction.close)) }
+```
+
+Skip 看到完整 `SettingsViewModel.ViewAction.close` 就會原樣輸出。
+
+第二類：**`Unresolved reference 'ContentUnavailableView'`**。SkipUI 還沒實作這個 modifier/component。`UserDetailView` 跟 `PostListView` 都有用。要嘛包 `#if !SKIP` 給 iOS 用、Android 另寫替代品，要嘛把整個 View 暫時包 `#if !SKIP` 推到後續處理。
+
+### 第三道 wall：Skip 的型別 silent fallback
+
+`PostFilterViewModel+Models.swift`：
+
+```swift
+let users: [User] = (1...5).map { .init(id: $0) }
+```
+
+`.init(id: $0)` 是 leading-dot init，Swift compiler 從 `[User]` 推 `.init` 是 `User.init`。**Skip 推不出來**，silent fallback 到 Kotlin 的 `Any`：
+
+```kotlin
+internal val users: Array<User> = (1..5).map { it -> Any(id = it) }
+//                                              ^^^^^^^^^^^^ Any 沒有 id 參數
+```
+
+修法跟 M12 的 leading-dot enum lift 同類——**顯式拼**：
+
+```swift
+let users: [User] = (1...5).map { User(id: $0) }
+```
+
+### 務實縮小範圍
+
+M12 結束時太樂觀，以為「整個 tab-bar app 都能在 Android 跑」。M13 一打開 Kotlin compile gauntlet 才看清楚每個 feature 都有自己的 compile-stage 問題：Profile 用 `UIApplication.shared.open` 跟 `UNUserNotificationCenter`，UserDetail 跟 PostList 用 `ContentUnavailableView`，多處 `.view(.something)` 要顯式 qualify……每個都是獨立的 commit 量。
+
+所以我把 Step 7d 收回到「**單一 feature 端到端跑 Android**」。其他五個 feature 暫時整檔包 `#if !SKIP`，Android 看不到，Step 8+ 一個一個處理。Settings 因為最單純（沒 API、沒 deeplink、一個 `.view(.close)` call site）成為第一個渲染目標。
+
+三個 source 修正下去：
+
+1. `Skip.env` 的 `ANDROID_PACKAGE_NAME`
+2. `SettingsView` qualify `SettingsViewModel.ViewAction.close`
+3. `PostFilterViewModel+Models` 的 `.init` 顯式
+
+`skip app launch --android --plain` 跑：
+
+```
+[✓] Check project schemes (0.71s)
+[✓] Build MVVMCSkipDemo App (14.0s)
+[✓] Launch Skip app succeeded in 14.71s
+```
+
+Pixel 9 emulator 上：
+
+![Settings on Android](images/m13-android-settings.png)
+
+**`關閉` 按鈕、`設定` 標題、`一般` section header、`版本 1.0.0`、`Build 1`**——Settings 完整渲染。Compose 接住了 SwiftUI 的 `List` / `LabeledContent` / `NavigationStack` / `toolbar`，中文字 rendering 對。
+
+同時 iOS 沒被搞壞：
+
+![PostList on iOS](images/m13-ios-postlist.png)
+
+PostList tab + Tab Bar 維持 M8 之後完全不變的 UIKit 行為。
 
 ---
 
-## 七、盤點：feature code 改了幾行？— *placeholder*
-
-> 🚧 待 7d 完成後更新。先列 7c 結束時的數據：
+## 七、盤點：feature code 累計改了幾行？
 
 | 檔案 | 改動 | 行數 | 性質 |
 |---|---|---|---|
-| `AppRouter.swift` | `nonisolated(unsafe)` | 1 | Swift 6 concurrency（M5） |
-| `AppDelegate.swift` | 移 @main + public ×3 | ~5 | 跨 module 入口（M7） |
-| `SceneDelegate.swift` | public ×6 | ~6 | 跨 module 字串查找（M7） |
-| 10 個 iOS-only files | `#if !SKIP` 整檔包 | 20 | Skip 隱形（M11） |
-| `UserDetailView.swift` | case-where → if-in-body | ~5 | Kotlin grammar（M12） |
-| `UserDetailViewModel.swift` | 巢狀 enum 拆 + nested case 拆 | ~15 | Skip type inference（M12） |
-| `PostListViewModel.swift` | 同上 | ~15 | 同上 |
-| `PostListView.swift` | case-where + #if 包 modifier | ~10 | 同 Kotlin grammar |
+| `App/AppRouter.swift` | `nonisolated(unsafe)` | 1 | Swift 6 concurrency（M5） |
+| `App/AppDelegate.swift` | 移 `@main` + public ×3 | ~5 | 跨 module 入口（M7） |
+| `App/SceneDelegate.swift` | public ×6 | ~6 | 跨 module 入口（M7） |
+| App-層 4 個檔 | `#if !SKIP` 整檔包 | ~8 | Skip 隱形（M11） |
+| 6 個 `*HostController.swift` | `#if !SKIP` 整檔包 | ~12 | Skip 隱形（M11） |
+| `UserDetailView.swift` | `case where` 改寫，後 `#if !SKIP` 包 | ~10 | M12 / M13 |
+| `UserDetailViewModel.swift` | typed-let lift + 巢狀 case 拆 | ~15 | Skip 轉譯（M12） |
+| `PostListViewModel.swift` | 同上 | ~15 | Skip 轉譯（M12） |
+| `PostListView.swift` | `case where` + modifier `#if !SKIP` + 整檔包 | ~12 | M12 / M13 |
+| `SettingsView.swift` | 顯式 qualify nested enum | ~3 | Kotlin compile（M13） |
+| `PostFilterViewModel+Models.swift` | `.init` → `User(...)` | ~1 | Kotlin compile（M13） |
+| 5 個其他 feature 檔（Profile / PostFilter / PostDetail） | `#if !SKIP` 包（Step 8 deferred） | ~10 | M13 |
+| `Android/AppEntry.swift`（新建） | RootView + AppDelegate proxy | ~30 | Android 入口（M13） |
 
-合計 ~75 行改動，遍佈 4 個 feature 檔 + 4 個 App-層檔 + 6 個 HostController（純包 `#if !SKIP`，內部 0 行）。
+**累計約 130 行**遍佈約 23 個檔。
 
-**`PostDetail` / `PostFilter` / `Profile` / `Settings` 四個 feature 完全零碰**。
+但**架構零變更承諾依然成立**：
+- M / VM / V / C 四層分界 **未動**
+- `doAction` 單一進入點 **未動**
+- `Router` enum 機制 **未動**
+- `@Observable` ViewModel 形狀 **未動**
+- UIKit `HostController` 在 iOS 端的 C-層角色 **未動**
+
+**Settings feature 從同一份 Swift source 在 iOS（UIKit 原生）跟 Android（Skip transpile 後的 Compose）都正確渲染**。這是 Article A 的核心承諾兌現的第一個證據點。
 
 ---
 
-## 八、下一篇：Article B / C 的對照組 — *teaser*
+## 八、下一篇 teaser
 
-> 🚧 placeholder。可能話題：
-> - MVVMR（純 SwiftUI iOS-only）和 MVVMC-Skip 的成本對照
-> - MVVMR-Skip（純 SwiftUI 跨平台）的設計選擇跟 MVVMC-Skip 哪裡不一樣
-> - 我會不會推薦別人走 MVVMC-Skip 這條路？什麼情況下推薦、什麼情況下不推薦？
+Step 8 是 per-feature Android port——每個 feature 一個 commit：
+
+1. **PostFilter** ─ 最單純，沒 API 沒 deeplink，跟 Settings 同等級
+2. **PostList** ─ 有 API call，要修 `ContentUnavailableView` 替代 + 多處 `.view(...)` qualifier
+3. **Profile** ─ 有 `UIApplication.shared.open` 跟 `UNUserNotificationCenter`，需要 Android 端 deeplink 替代設計
+4. **UserDetail** ─ API + `ContentUnavailableView`
+5. **PostDetail** ─ 最後
+
+每個 feature ship 完，Android root view 從 `NavigationStack { SettingsView }` 慢慢長成完整的 tab bar app。
+
+當所有 feature port 完，文章的下一個對照可以變成：
+- **Article B**：MVVMR（純 SwiftUI 改寫 MVVMC）— iOS-only。先把 UIKit 拆掉，再考慮跨平台。
+- **Article C**：MVVMR-Skip（純 SwiftUI 跨平台）— 從一開始就 SwiftUI、不留 UIKit。
+
+跟 Article A（MVVMC-Skip，**iOS UIKit 留著**）放在一起，可以看清楚 **「保留既有架構」vs「重寫一份」** 在跨平台成本上的差別。
+
+---
+
+> 本文涵蓋的 commit：[`7558842`](../../../commit/7558842)（M8）、[`1ba78fa`](../../../commit/1ba78fa) + [`6e6dcb1`](../../../commit/6e6dcb1)（M9）、[`fa063a9`](../../../commit/fa063a9)（M10）、[`71b9284`](../../../commit/71b9284)（M11）、[`fdaaac1`](../../../commit/fdaaac1)（M12）、M13 commit pending。
+> 完整決策軌跡 + verification 在 [`../CLAUDE.md`](../CLAUDE.md) 的 Migration Log M8–M13。
 
 ---
 

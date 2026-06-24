@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 struct UserDetailView: View {
@@ -57,4 +58,5 @@ private extension UserDetailView {
     UserDetailView(viewModel: vm)
   }
 }
+#endif
 #endif

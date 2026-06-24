@@ -1,3 +1,4 @@
+#if !SKIP
 import Foundation
 
 // MARK: - State
@@ -5,3 +6,4 @@ import Foundation
 extension ProfileViewModel {
   struct State: Sendable {}
 }
+#endif

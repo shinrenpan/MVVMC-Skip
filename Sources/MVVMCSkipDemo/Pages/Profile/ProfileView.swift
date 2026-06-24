@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 struct ProfileView: View {
@@ -41,4 +42,5 @@ struct ProfileView: View {
 #Preview {
   ProfileView(viewModel: ProfileViewModel())
 }
+#endif
 #endif

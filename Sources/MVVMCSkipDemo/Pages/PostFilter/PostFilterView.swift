@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 struct PostFilterView: View {
@@ -30,4 +31,5 @@ struct PostFilterView: View {
 #Preview {
   PostFilterView(viewModel: PostFilterViewModel())
 }
+#endif
 #endif

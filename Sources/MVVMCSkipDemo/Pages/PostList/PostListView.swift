@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 struct PostListView: View {
@@ -98,4 +99,5 @@ private extension PostListView {
     PostListView(viewModel: vm)
   }
 }
+#endif
 #endif

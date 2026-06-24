@@ -4,15 +4,13 @@
 // Setting to "launch" will build and run the app in the first open Android emulator or device
 // Setting to "build" will just run gradle build, but will not launch the app
 // Setting to "none" will completely disable the build and launch of the Android app
-// NOTE: SKIP_ACTION stays "none" until Step 7 binds the skipstone plugin to
-// the SPM target. The Android/ shell already exists (M9 / Step 6), but
-// without the plugin bound there are no transpiled Kotlin sources for the
-// library, so `gradle launchDebug` would fail to compile Main.kt's
-// references to MVVMCSkipDemoRootView et al. Step 7 binds the plugin AND
-// converts the first feature, after which this can flip to "launch".
-//SKIP_ACTION = launch
+// SKIP_ACTION = launch: each iOS xcodebuild also drives gradle through
+// Android/, transpiling and (re)installing on the booted emulator. This is
+// the default once Step 7d wires the Android root view + AppDelegate
+// symbols that Main.kt expects.
+SKIP_ACTION = launch
 //SKIP_ACTION = build
-SKIP_ACTION = none
+//SKIP_ACTION = none
 
 ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
 ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor

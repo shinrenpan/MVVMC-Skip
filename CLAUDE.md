@@ -254,7 +254,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `grep "error:" /tmp/step7b-build.log | sort -u` → exactly **1** distinct error, this time at `UserDetailView.swift:9:48` (`case where`), not at any `HostController.swift`.
   - The HostController family of errors is invisible to Skip — confirmed by `grep -l "HostController" /tmp/step7b-build.log` returning no transpile-error matches.
 
-### M12 — Step 7c: run the Skip transpile gauntlet (this commit)
+### M12 — Step 7c: run the Skip transpile gauntlet (commit `fdaaac1`)
 - **What**: Fixed every Skip-incompatible Swift pattern in the order Skip surfaced them, until the entire `MVVMCSkipDemo` module transpiles to Kotlin without error. Three files touched:
   - `UserDetailView.swift` — rewrote `case .loading where viewModel.state.user == nil` into `case .loading` + `if let user = … else { ProgressView() }`. Semantics preserved (still falls back to displaying the cached user when reloading).
   - `UserDetailViewModel.swift` — at API call sites (`fetchUser`), lifted `.success(dto)` / `.failure(.message(…))` into explicitly-typed `let result: Result<UserDTO, APIError> = …`. In `handleAPIResponse`, split `case let .fetchUserDidFinish(.success(dto))` (nested destructuring in one `case`) into outer `case let .fetchUserDidFinish(result)` + inner `switch result`.
@@ -288,6 +288,61 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `skip app launch --ios --plain` → `[✓] Launch Skip app succeeded in 8.8s`. iOS behaviour confirmed unchanged after the V/VM edits.
   - All four touched files preserve their original control-flow semantics (verified by inspection of pre/post diffs and by iOS app continuing to render correctly).
 
+### M13 — Step 7d: Android renders Settings (this commit)
+- **What**:
+  - Added `Sources/MVVMCSkipDemo/Android/AppEntry.swift` (wrapped `#if SKIP`) declaring two `public` types that `Android/app/src/main/kotlin/Main.kt` resolves via `typealias`:
+    - `MVVMCSkipDemoRootView` — Android root view; for Step 7d simply wraps `SettingsView` in a `NavigationStack`.
+    - `MVVMCSkipDemoAppDelegate` — Android-side lifecycle proxy; empty `onInit/onLaunch/onResume/onPause/onStop/onDestroy/onLowMemory` implementations, sufficient to satisfy Skip's contract.
+  - `Skip.env`: `ANDROID_PACKAGE_NAME = com.joe.mvvmc.demo` → `mvvmcskip.demo` (matches `Main.kt`'s `package` line and the Skip-derived module namespace). Added an explicit `ANDROID_APPLICATION_ID = com.joe.mvvmc.demo` so the Android app id still matches the iOS bundle id.
+  - `Darwin/MVVMCSkipDemo.xcconfig`: `SKIP_ACTION` flipped `none` → `launch`. Each iOS xcodebuild now also drives the Android gradle pipeline.
+  - Wrapped six non-Settings feature surfaces in `#if !SKIP` to keep Step 7d focused on a *single* end-to-end feature: `PostDetailView`, `PostFilterView`, `PostListView`, `ProfileView`, `UserDetailView`, plus `ProfileViewModel` (UIKit-using) and `ProfileViewModel+Models` (extension on the wrapped class). The wrapped Views and VM remain fully visible to iOS; Android simply doesn't see them yet.
+  - Two targeted source fixes for issues surfaced by the **Kotlin compile gauntlet** (see Journey below):
+    - `SettingsView.swift`: fully qualified `SettingsViewModel.ViewAction.close` at the only `doAction` call site. Skip's transpiler otherwise emits bare `ViewAction.close` (missing the outer class qualifier) when the nested enum is declared in an extension.
+    - `PostFilterViewModel+Models.swift`: replaced `(1...5).map { .init(id: $0) }` with `(1...5).map { User(id: $0) }`. Leading-dot `.init(...)` resolves to Kotlin's `Any(...)` in Skip's output, which doesn't have an `id` parameter.
+- **Why — the second gauntlet**: M12 closed Skip's **transpile** gauntlet — Swift → Kotlin syntax was clean for the entire module. M13 ran into a second gauntlet that M11/M12 did not anticipate: **the transpiled Kotlin still has to compile against the Android toolchain (Kotlin + SkipUI + AndroidX)**. The transpiler accepts plenty of code that the Kotlin compiler then refuses. Two distinct gauntlets, run in series.
+- **Journey** — the realisation that "Skip transpile clean ≠ Android can build":
+
+  *Initial expectation.* "Wire `MVVMCSkipDemoRootView` + `AppDelegate`, flip `SKIP_ACTION`, run `skip app launch --android`." Three lines of plan; the actual work was much larger.
+
+  *First wall — Android package mismatch.* `gradle` could not resolve `com.joe.mvvmc.demo:MVVMCSkipDemo` because `ANDROID_PACKAGE_NAME` had been set to the iOS bundle id (a leftover from M5 where I conflated the two). Skip wants `ANDROID_PACKAGE_NAME` to be the *Kotlin package name* (`mvvmcskip.demo`) and `ANDROID_APPLICATION_ID` to be the *Android app id* (which can match the iOS bundle id). They are two separate concepts. Fixed.
+
+  *Second wall — the Kotlin compile gauntlet appears.* With package resolution fixed, gradle reached `compileDebugKotlin` — and erupted. Two error classes:
+  - **`Unresolved reference 'ViewAction'`** in every transpiled View that calls `viewModel.doAction(.view(.something))`. Skip's transpiler took the Swift call `.view(.close)` and produced Kotlin `SettingsViewModel.Action.view(ViewAction.close)` — but `ViewAction` is a nested type, so the bare identifier doesn't resolve. The fix is to fully-qualify the inner enum at the Swift call site: `.view(SettingsViewModel.ViewAction.close)`. Skip then emits the proper `SettingsViewModel.ViewAction.close`.
+  - **`Unresolved reference 'ContentUnavailableView'`** in `UserDetailView` and `PostListView`. SkipUI hasn't implemented `ContentUnavailableView` yet — for these features the right play is to wrap the entire View in `#if !SKIP` for now and add per-feature Android-friendly alternatives later.
+
+  *Third wall — Skip's silent type fallback.* `PostFilterViewModel+Models.swift`'s `(1...5).map { .init(id: $0) }` transpiled into Kotlin `(1..5).map { it -> Any(id = it) }`. Skip couldn't infer the target type for `.init` and silently fell back to Kotlin's `Any` — which doesn't have an `id` parameter. Spelling `User(id: $0)` explicitly fixes it. This is the same family of issue as M12's "leading-dot enum ambiguity", but in a constructor context.
+
+  *The pragmatic narrowing.* Once the second-gauntlet shape was clear, I narrowed Step 7d's deliverable from "the whole MVVMC tab-bar app runs on Android" (which M12's success had tempted me to claim) back to "**one feature, end-to-end, on Android**". The other five features (`Profile`, `PostList`, `PostDetail`, `PostFilter`, `UserDetail`) each have their own Kotlin-compile issues (deeplinks, `UIApplication.shared`, `UNUserNotificationCenter`, more `.view(...)` qualifications, `ContentUnavailableView`, etc.). Each will get its own future commit. They're temporarily `#if !SKIP`-walled.
+
+  *Settings wins.* Settings is the simplest feature — no API calls, no deeplinks, no notifications, one call site to qualify. After three targeted edits (`Skip.env`, `SettingsView` qualifier, `PostFilterViewModel+Models.init`), `skip app launch --android` reported success in 14.7 s. **The Settings screen renders on the Pixel 9 emulator with `關閉` / `設定` / `一般` / `版本 1.0.0` / `Build 1` correctly localised**.
+
+  *What the article actually claims at this checkpoint.* Article A's central bet — *a UIKit-based MVVMC iOS app can be brought to Android via Skip with the iOS architecture left intact* — is **verified in principle by Settings**, **not in scope for the other five features yet**. The next chapter is per-feature work: tackle each feature's Kotlin compile issues, unwrap it on Android, expand the Android root to the full tab-bar app.
+
+- **Verification**:
+  - `skip app launch --android --plain` → `[✓] Launch Skip app succeeded in 14.71s`.
+  - Pixel 9 emulator screenshot at `articles/images/m13-android-settings.png` shows the Settings screen with all UI elements (`關閉` button, `設定` navigation title, `一般` section header, `版本` / `Build` rows) correctly rendered in Compose.
+  - `skip app launch --ios --plain` → `[✓] Launch Skip app succeeded in 11.63s`. iOS PostList tab + Tab Bar still render exactly as in M8. Architecture-zero-change confirmed at runtime after all M13 source edits.
+  - iOS screenshot at `articles/images/m13-ios-postlist.png` shows the unchanged iOS surface.
+
+- **Feature-code line tally at M13** (cumulative across all M-entries):
+
+  | File | Touches | Lines | Class |
+  |---|---|---|---|
+  | `App/AppRouter.swift` | `nonisolated(unsafe)` | 1 | Swift 6 concurrency (M5) |
+  | `App/AppDelegate.swift` | move `@main` + `public` ×3 | ~5 | cross-module entry (M7) |
+  | `App/SceneDelegate.swift` | `public` ×6 | ~6 | cross-module entry (M7) |
+  | App-layer `#if !SKIP` (4 files) | wrap | ~8 | Skip invisibility (M11) |
+  | 6 × `*HostController.swift` | `#if !SKIP` wrap | ~12 | Skip invisibility (M11) |
+  | `UserDetailView.swift` | `case where` → if-in-body, then `#if !SKIP` wrap | ~10 | Kotlin grammar (M12) + deferred (M13) |
+  | `UserDetailViewModel.swift` | typed-let lift, nested case split | ~15 | Skip transpile (M12) |
+  | `PostListViewModel.swift` | typed-let lift, nested case split | ~15 | Skip transpile (M12) |
+  | `PostListView.swift` | `case where` rewrite, modifier `#if !SKIP`, then full-file wrap | ~12 | Kotlin grammar (M12) + deferred (M13) |
+  | `SettingsView.swift` | qualify `SettingsViewModel.ViewAction.close` | ~3 | Skip type inference (M13) |
+  | `PostFilterViewModel+Models.swift` | `.init(...)` → `User(...)` | ~1 | Skip type inference (M13) |
+  | `ProfileView.swift`, `ProfileViewModel.swift`, `ProfileViewModel+Models.swift`, `PostDetailView.swift`, `PostFilterView.swift` | `#if !SKIP` wrap (Step 7e deferral) | ~10 | Future work (M13) |
+
+  **Total ≈ 100 lines edited across ~22 files**. `MVVMC` architecture (M / VM / V / C separation, `doAction` single-entry-point, `Router` enums, `@Observable` ViewModel, UIKit `HostController` C-layer) **unchanged**. The Settings feature renders on both iOS (UIKit-native) and Android (Skip-transpiled Compose) **from the same Swift source**.
+
 ---
 
 ## Next Steps (start here in the next session)
@@ -304,7 +359,8 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
    - **7a** — Bind the `skipstone` plugin to the `MVVMCSkipDemo` target. iOS xcodebuild goes red (intentionally) with one fail-fast error from Skip. ✅ Done in M10.
    - **7b** — Wrap all `*HostController.swift` + UIKit-only App-layer files in `#if !SKIP`. ✅ Done in M11. Discovered the frontier moves to a *View* (`case where`), not a VM as M5 predicted.
    - **7c** — Fix Skip-transpile issues in the order Skip surfaces them, until the entire `MVVMCSkipDemo` module transpiles. ✅ Done in M12. Four rebuilds, four fixes, in two files each of V/VM (UserDetail + PostList). The four other features needed no edits.
-   - **7d** — Add an Android root view + wire to `Android/.../Main.kt`. Flip `SKIP_ACTION = launch`. Run `skip app launch --android` → first Android render. Screenshot.
+   - **7d** — Add Android root view + wire `Main.kt` + flip `SKIP_ACTION`. ✅ Done in M13. **Settings renders on Pixel 9 emulator** (`articles/images/m13-android-settings.png`). Five other features `#if !SKIP`-walled, deferred to Step 8+.
+8. **Per-feature Android conversion** — one commit per feature: tackle that feature's Kotlin compile issues (qualifying nested enums, replacing `ContentUnavailableView`, dealing with platform-specific API calls like `UIApplication.shared.open` and `UNUserNotificationCenter`), unwrap it on Android, expand the Android `MVVMCSkipDemoRootView` to include the feature. Suggested order by complexity: `PostFilter` → `PostList` → `Profile` (deeplinks) → `UserDetail` (API + ContentUnavailableView) → `PostDetail` (then root becomes a full tab bar).
 8. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
 
 Each step's `Why:` and any gotchas land back in the Migration Log above as they happen.

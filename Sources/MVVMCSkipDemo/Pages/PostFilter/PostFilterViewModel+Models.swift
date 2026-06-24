@@ -4,7 +4,9 @@ import Foundation
 
 extension PostFilterViewModel {
   struct State: Sendable {
-    let users: [User] = (1...5).map { .init(id: $0) }
+    // `.init(id: $0)` would force Skip to infer `User` from leading-dot,
+    // and Skip falls back to `Any(id = …)` which Kotlin rejects. Spell it.
+    let users: [User] = (1...5).map { User(id: $0) }
   }
 }
 

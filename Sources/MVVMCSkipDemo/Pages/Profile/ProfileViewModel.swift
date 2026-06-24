@@ -1,3 +1,4 @@
+#if !SKIP
 import Observation
 import UIKit
 import UserNotifications
@@ -64,3 +65,4 @@ extension ProfileViewModel {
     case toSettings
   }
 }
+#endif
