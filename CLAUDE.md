@@ -56,7 +56,13 @@ This repo only documents **Skip-specific deltas** on top of those rules.
 
 A running journal of decisions and trade-offs made while bringing MVVMC to Skip. Each entry pairs the **commit** with the **why** — written for future Article-A reference and for any future Claude session picking up this repo cold.
 
-> Convention: every commit message in this repo should include a `Why:` paragraph. The Migration Log is the curated narrative that survives even if commits get squashed/rebased.
+> **Conventions**:
+> - Every commit message in this repo includes a `Why:` paragraph. The Migration Log is the curated narrative that survives even if commits get squashed/rebased.
+> - Each entry has up to four sub-sections:
+>   - **What** — the diff in plain English.
+>   - **Why** — the reasoning that justifies the diff.
+>   - **Journey** — only present when the path to the diff was non-trivial. A beat-by-beat narrative (premise → obstacles → forks → resolution), written as article-ready prose. Skip this section for mechanical steps where the journey wouldn't carry a paragraph.
+>   - **Verification** — the proof that "done" means done.
 
 ### M0 — Baseline established (commit `db9013d`)
 - **What**: Cloned from main MVVMC at v1.1.0, no modifications.
@@ -97,6 +103,33 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   **Decision**: defer plugin binding to Step 7 (where each feature is converted one commit at a time: wrap HostController in `#if !SKIP`, rewrite VM for Skip type inference, verify Skip transpiles that feature). Step 2 ships only as scaffolding: deps declared, env file present, `skip doctor` green, Swift 6 concurrency hole closed. iOS xcodebuild remains identical to M4 (still green).
   
   **Why the iOS-zero-change promise was relaxed**: forcing "zero feature code change" forced Swift 5 language mode (because `appTransitionStyleKey` violates Swift 6). That left the entire repo stuck on a previous-generation toolchain just to preserve a slogan, while every realistic Skip migration needs the same kind of pin-prick fixes anyway. Relaxing to "minimal, necessary fixes — architecture untouched" matches the work actually needed without losing the architectural promise that gives the article its thesis.
+- **Journey** (the path from "Step 2 is two lines" to what actually shipped — article material):
+
+  *Premise.* The original Next Steps line read: *"Add Skip plugin to `Package.swift` + create `Skip.env`. Run `skip doctor`."* Two lines. A passive wiring step. The plan author (also me, in M3) expected to land it in a single small commit.
+
+  *First wall — toolchain disagreement.* `swift build` immediately failed: no `UIKit`. Of course — SPM defaults to the macOS SDK on a Mac host, and Swift Package Manager has no native cross-compile story for iOS. Pivoted to `xcodebuild -destination 'generic/platform=iOS Simulator'`. iOS green. Annoying but expected — this is the *price of using SPM as source-of-truth* on a UIKit codebase, and it shows up in every commit that doesn't go through Xcode.
+
+  *Second wall — the empty xcodeproj shell.* `xcodebuild` insisted on opening `MVVMCDemo.xcodeproj` over `Package.swift`. But the xcodeproj is an XcodeGen artefact: only `contents.xcworkspacedata` is tracked, `project.pbxproj` is gitignored. Locally the shell is broken. Workaround: temporarily move the shell aside before `xcodebuild`, restore after. Ugly, but transient — Step 4 retires the shell entirely. *Lesson for the article: dual-track (XcodeGen + SPM) doesn't fade out cleanly; you live with one ugly workaround until you commit to the SPM-only side.*
+
+  *Third wall — `skipstone` is eager.* Wired the plugin. Build instantly failed in a new place: the plugin had **already started transpiling Swift to Kotlin during the iOS build**. Earlier mental model was wrong — the plugin isn't a passive declaration that activates only on `skip app launch --android`. It binds itself to the build graph and runs every time the target compiles. *This is the single biggest discovery of Step 2.* It rewrites how every subsequent step has to be planned: the question is no longer "when does Skip code start being needed" but "when does the plugin start being allowed to look at the codebase."
+
+  *The Swift 5 reflex (and why it was wrong).* First Skip-triggered error was on `AppRouter.swift`'s `private var appTransitionStyleKey: UInt8 = 0` — Swift 6 strict concurrency rejects global `var`. My reflex was to set `swiftLanguageVersions: [.v5]` in `Package.swift` to preserve the old code unchanged. *The user pushed back here* — "用 Swift 6, iOS feature code 零改太嚴格了". That intervention pivoted the whole policy: the slogan "zero iOS change" was forcing the entire repo onto a previous-generation toolchain just to avoid a one-line `nonisolated(unsafe)`. Relaxed the policy to *"architecture zero-change; minimal, necessary content fixes allowed"*. Reverted the Swift 5 pin. Fixed `appTransitionStyleKey` properly with `nonisolated(unsafe)`. *Lesson: a "zero-change" promise that requires a toolchain time-machine isn't an architectural promise — it's a cargo-cult promise. The real promise is the architecture, not the bytes.*
+
+  *The big-bang attempt.* With the policy relaxed and the plugin still bound, tried to push through: wrap all 10 iOS-only files (4 App-layer, 6 HostControllers) in `#if !SKIP`, fix the concurrency hole, rebuild. iOS went green. Skip plugin made it further into the codebase — and then crashed on ViewModels with `Skip is unable to determine the owning type for member 'success'`. The offending pattern is *every* MVVMC ViewModel's API response shape: `await doAction(.apiResponse(.fetchUserDidFinish(.success(dto))))`. Nested leading-dot enums. Swift compiler handles them fine through bidirectional type inference; Skip's transpiler doesn't. *Hit a wall that isn't 10 files — it's the entire codebase.*
+
+  *The MVVMR-Skip evidence.* Looked at the sibling repo. Same author, same VM shape, same problem — solved by lifting the nested enum into an explicitly-typed local before the outer call:
+  ```swift
+  let result: Result<UserDTO, APIError> = .success(dto)
+  await doAction(.apiResponse(.fetchUserDidFinish(result)))
+  ```
+  Two lines instead of one. Works. But this fix is needed *per call site*, in every ViewModel. It's not a Step 2 fix — it's a Step 7 fix, and it scales linearly with feature count.
+
+  *The retreat.* Reverted the 10 `#if !SKIP` wraps. Unbound the plugin. Kept the policy revision (Swift 6 + Skip-friendly style allowed). Kept the `AppRouter` concurrency fix (independently correct, Swift 6 needs it). Kept `Skip.env`, `skip.yml`, and the new dependencies. Re-shaped Step 7 from "wrap AppRouter, one screen renders" into "bind plugin + wrap *all* iOS-only files + convert one feature end-to-end + render on Android" — a heavier step but with a clearer success criterion.
+
+  *Resolution.* Step 2 ships as scaffolding: Skip declared as a dependency, `Skip.env` present, `skip doctor` green, Swift 6 concurrency hole closed, iOS xcodebuild still identical to M4. **No Kotlin code has been generated yet.** Skip is "in the project" but hasn't been "given the project to read." That handover is Step 7.
+
+  *Why this story matters for Article A.* The article isn't "how I ran `skip init` and got Android." It's "how an existing UIKit + MVVMC iOS app meets Skip's expectations." That meeting is genuinely uncomfortable: dual-build-tools, eager transpilation, type-inference asymmetry, a slogan that turns into a toolchain straitjacket. Step 2's "two-line job" expanding into a policy revision is itself the lesson — and the reason a sibling repo (MVVMR-Skip) chose to abandon UIKit entirely rather than fight this. MVVMC-Skip's bet is that the fight is worth it. M5 is the first proof of how it's fought.
+
 - **Verification**:
   - `xcodebuild -scheme MVVMCDemo -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build` → `** BUILD SUCCEEDED **`.
   - `skip doctor` → `Skip 1.9.3 doctor succeeded`.
