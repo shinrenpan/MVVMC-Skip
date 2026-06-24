@@ -1,4 +1,3 @@
-#if !SKIP
 import SwiftUI
 
 struct PostListView: View {
@@ -15,20 +14,31 @@ struct PostListView: View {
         } else {
           List(viewModel.state.posts) { post in
             PostRow(post: post) {
-              Task { await viewModel.doAction(.view(.postDidTap(post))) }
+              Task { await viewModel.doAction(.view(PostListViewModel.ViewAction.postDidTap(post))) }
             } onUserTap: {
-              Task { await viewModel.doAction(.view(.userDidTap(post.userId))) }
+              Task { await viewModel.doAction(.view(PostListViewModel.ViewAction.userDidTap(post.userId))) }
             }
           }
         }
       case let .error(message):
+        // SkipUI doesn't implement ContentUnavailableView yet; provide a
+        // plain VStack fallback on Android so the error state still renders.
+        #if !SKIP
         ContentUnavailableView(message, systemImage: "exclamationmark.triangle")
+        #else
+        VStack(spacing: 8) {
+          Image(systemName: "exclamationmark.triangle")
+            .font(.largeTitle)
+          Text(message)
+        }
+        .foregroundStyle(.secondary)
+        #endif
       default:
         List(viewModel.state.posts) { post in
           PostRow(post: post) {
-            Task { await viewModel.doAction(.view(.postDidTap(post))) }
+            Task { await viewModel.doAction(.view(PostListViewModel.ViewAction.postDidTap(post))) }
           } onUserTap: {
-            Task { await viewModel.doAction(.view(.userDidTap(post.userId))) }
+            Task { await viewModel.doAction(.view(PostListViewModel.ViewAction.userDidTap(post.userId))) }
           }
         }
       }
@@ -37,17 +47,17 @@ struct PostListView: View {
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
         Button("Profile") {
-          Task { await viewModel.doAction(.view(.toProfile)) }
+          Task { await viewModel.doAction(.view(PostListViewModel.ViewAction.toProfile)) }
         }
       }
       ToolbarItem(placement: .topBarTrailing) {
         Button("Filter") {
-          Task { await viewModel.doAction(.view(.showFilter)) }
+          Task { await viewModel.doAction(.view(PostListViewModel.ViewAction.showFilter)) }
         }
       }
     }
     .task {
-      await viewModel.doAction(.view(.isFirstAppear))
+      await viewModel.doAction(.view(PostListViewModel.ViewAction.isFirstAppear))
     }
   }
 }
@@ -99,5 +109,4 @@ private extension PostListView {
     PostListView(viewModel: vm)
   }
 }
-#endif
 #endif

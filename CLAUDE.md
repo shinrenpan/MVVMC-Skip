@@ -343,7 +343,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
 
   **Total ≈ 100 lines edited across ~22 files**. `MVVMC` architecture (M / VM / V / C separation, `doAction` single-entry-point, `Router` enums, `@Observable` ViewModel, UIKit `HostController` C-layer) **unchanged**. The Settings feature renders on both iOS (UIKit-native) and Android (Skip-transpiled Compose) **from the same Swift source**.
 
-### M14 — Step 8a: PostFilter ports to Android (this commit)
+### M14 — Step 8a: PostFilter ports to Android (commit `9ecff44`)
 - **What**:
   - Unwrapped `Sources/MVVMCSkipDemo/Pages/PostFilter/PostFilterView.swift` from `#if !SKIP` (added back in M13 deferral).
   - Applied **idiom #6** (qualify nested enum at call site) to all three `doAction` sites in `PostFilterView` — `.view(.showAll)` → `.view(PostFilterViewModel.ViewAction.showAll)`, etc.
@@ -354,6 +354,46 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - Pixel 9 screenshots at `articles/images/step8a-android-root.png` (the new feature-index root) and `articles/images/step8a-android-filter.png` (PostFilter screen with `Cancel` toolbar, `Filter by User` title, `Show All` + `User 1`–`User 5` rows correctly rendered, including idiom #7's `User(id: $0)` fix being exercised at runtime).
   - `skip app launch --ios --plain` → `Launch Skip app succeeded in 10.71s`. iOS PostList tab + UITabBarController unchanged.
   - `PostFilterView`'s edits are 3 idiom-#6 qualifications, ~3 lines net change. PostFilter feature surface (VM, View, Models) keeps its MVVMC shape intact.
+
+### M15 — Step 8b: PostList View structure ports; async state-propagation gap discovered (this commit)
+- **What**:
+  - Unwrapped `Sources/MVVMCSkipDemo/Pages/PostList/PostListView.swift` from `#if !SKIP` (M13 deferral).
+  - Applied **idiom #6** (qualify nested enum at call site) to all 5 distinct `doAction` sites in `PostListView` (some appearing twice due to `case .loading` vs `default` branches).
+  - **Idiom #8 — `#if !SKIP` / `#else` shim for absent SkipUI APIs**: `ContentUnavailableView` doesn't exist in SkipUI yet. iOS keeps the rich `ContentUnavailableView`; Android gets a `VStack` with `Image(systemName:) + Text(message)` fallback. Same visual intent, available on both platforms. Documented as idiom #8 for future use.
+  - Added a third row (`Posts`) to `MVVMCSkipDemoRootView`'s `Section("Ported features")`.
+- **Why a separate sub-step**: PostList is the first feature with an actual API-driven state machine — `state.api.fetchPosts` cycles `.prepare → .loading → .success/.error` driven by a `.task { await viewModel.doAction(.view(.isFirstAppear)) }` block. Settings (M13) and PostFilter (M14) didn't exercise this — Settings has no state machine, PostFilter is hardcoded.
+- **Journey** — the third gauntlet appears:
+
+  *The plan.* Unwrap PostListView, apply idiom #6 + ContentUnavailableView shim, add to root index. Pixel 9 should show PostList rendered with the mock data the iOS app already displays.
+
+  *iOS still works fine.* `skip app launch --ios` renders all five mock posts in M8's familiar layout. Same Swift code, no MVVMC architectural change.
+
+  *Android renders the View shell but not the data.* Navigation to `Posts` produces the **navigation chrome only**: back arrow, `Posts` title, `Profile` and `Filter` toolbar buttons. The `List` area is **blank** — no `ProgressView`, no rows, no error.
+
+  *Verifying it's not a rendering issue.* Temporarily hardcoded `State.api.fetchPosts: APIStatus = .loading` (was `.prepare`). Pixel 9 now correctly shows `ProgressView`. So the `switch` works, `is APIStatus.LoadingCase ->` matches, and `ProgressView()` does render in Compose. **The View shell is fine.** Reverted the hardcode.
+
+  *The actual gap.* What does NOT happen on Android:
+  - `.task { await viewModel.doAction(.view(.isFirstAppear)) }` does not advance `state.api.fetchPosts` from `.prepare` past `.loading`. The screen stays on the empty `default` branch with `posts: []`.
+  - Skip's `.task` modifier transpiles into Kotlin as `MainActor.run { viewModel.doAction(…) }` — synchronous-looking and *not* awaiting the suspend function. Switching to `.onAppear { Task { await … } }` transpiles to `Task(isMainActor = true) { … }` (same shape as Settings's working button) — but the screen behaviour does not change.
+  - This suggests the issue is not just the `.task` modifier transpilation, but a deeper gap: **the async chain → `state.api.fetchPosts = .loading` → Compose recomposition** is not closing on Android. Either `doAction`'s suspend body never runs, or the inner-struct mutation (`state.api.fetchPosts = .loading` writes through `state.api`, a nested `MutableStruct`) doesn't propagate to the @Observable subscriber that Compose installed.
+
+  *Sibling-repo comparison is inconclusive.* `MVVMR-Skip`'s `PostListView` uses the identical `.task` pattern and identical VM shape. Either (a) it works there for reasons we haven't isolated, (b) it has the same issue but the author hadn't noticed, or (c) Skip's behaviour differs by some subtle version / configuration we missed. Not chased to a conclusion in this commit — that's its own follow-up.
+
+  *Why this is good material.* The Skip gauntlets recapped:
+  1. **Transpile gauntlet** (M10–M12) — does Swift convert to Kotlin syntax? Resolved with idioms #3, #4, #5.
+  2. **Kotlin compile gauntlet** (M13) — does the transpiled Kotlin compile against AndroidX / Compose / SkipUI? Resolved with idioms #6, #7.
+  3. **Runtime gauntlet** (M15, this commit) — once it compiles and launches, does the iOS execution model actually play out the same on Android? **Unresolved.** First time we encountered it.
+  
+  Articles benefit from this: "we thought all gauntlets were done — turns out there's a runtime one too" is a stronger article spine than "everything just works on Android".
+
+- **Resolution for this commit**: ship Step 8b with the **View shell** verified Android-rendering, the iOS path verified unchanged, the runtime gap **documented** here, and the deeper investigation deferred. Next sub-step (8b.1 or M16) explicitly targets the recomposition issue — likely with smaller test cases like a button-driven state mutation to isolate where the chain breaks.
+
+- **Verification**:
+  - `skip app launch --android --plain` → `Launch Skip app succeeded in 7.85s`. App boots. Navigation to `Posts` works. Screen shows shell.
+  - `skip app launch --ios --plain` → `Launch Skip app succeeded in 11.35s`. iOS PostList still renders all 5 mock posts (`articles/images/step8b-ios-postlist.png`).
+  - Pixel 9 screenshot at `articles/images/step8b-android-postlist-shell.png` shows the shell-only render (title, back arrow, toolbar; empty body). This is the artefact for documenting the runtime gauntlet's first appearance.
+
+- **New idiom**: **#8 — `#if !SKIP` / `#else` shim for absent SkipUI APIs**. When SkipUI doesn't yet implement an API (e.g. `ContentUnavailableView`), wrap the iOS call in `#if !SKIP`, provide an `#else` Android equivalent that uses primitives SkipUI supports. Differs from idiom #2 (whole-file `#if !SKIP`) — this is a *surgical, inline* shim that preserves the cross-platform body.
 
 ---
 
@@ -374,7 +414,7 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
    - **7d** — Add Android root view + wire `Main.kt` + flip `SKIP_ACTION`. ✅ Done in M13. **Settings renders on Pixel 9 emulator** (`articles/images/m13-android-settings.png`). Five other features `#if !SKIP`-walled, deferred to Step 8+.
 8. **Per-feature Android conversion** — one commit per feature:
    - **8a** — PostFilter. ✅ Done in M14.
-   - **8b** — PostList. Will need to replace/wrap `ContentUnavailableView` + multiple `.view(...)` qualifier sites.
+   - **8b** — PostList. ✅ View shell ports (M15). Runtime async/recompose gap discovered, deferred to follow-up.
    - **8c** — Profile. Has `UIApplication.shared.open` (deeplink) and `UNUserNotificationCenter` (push); needs Android-side substitutions or further `#if !SKIP` walls.
    - **8d** — UserDetail. API + `ContentUnavailableView`.
    - **8e** — PostDetail. After this, root can switch from feature-list to a TabView mirroring iOS.

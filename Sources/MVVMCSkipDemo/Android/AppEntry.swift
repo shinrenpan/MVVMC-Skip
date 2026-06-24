@@ -30,6 +30,9 @@ public struct MVVMCSkipDemoRootView: View {
           NavigationLink("Filter by User") {
             PostFilterView(viewModel: PostFilterViewModel())
           }
+          NavigationLink("Posts") {
+            PostListView(viewModel: PostListViewModel())
+          }
         }
       }
       .navigationTitle("MVVMC × Skip")
