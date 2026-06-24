@@ -144,7 +144,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
 - **Why**: Skip Lite's transpiler keys off the SPM target's `path`, and its plugin looks for `<targetPath>/Skip/skip.yml` relative to that path. With the source tree at `Sources/`, the implicit module name didn't match the eventual product name (`MVVMCSkipDemo`), and a future binding of the `skipstone` plugin would have looked for `Sources/Skip/skip.yml` — which is awkward because it sits next to feature folders rather than belonging to one module. Promoting everything into `Sources/MVVMCSkipDemo/` makes (a) the SPM module name, (b) the on-disk folder name, (c) `Skip.env`'s `PRODUCT_NAME`, and (d) `@testable import` all agree — which is what Skip's tooling assumes when it later generates `Darwin/MVVMCSkipDemo.xcconfig` and `Android/settings.gradle.kts` from `Skip.env`. This step is pure scaffolding: zero feature-code edits, every file's git history preserved through `git mv`.
 - **Verification**: `xcodebuild -scheme MVVMCSkipDemo -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build` → `** BUILD SUCCEEDED **`. (Note: scheme name auto-updated by SPM to track the renamed product; no manual scheme edit needed.)
 
-### M7 — `Darwin/` iOS app shell + retire XcodeGen (this commit)
+### M7 — `Darwin/` iOS app shell + retire XcodeGen (commit `ebab12a`)
 - **What**:
   - Added `Darwin/` populated from a freshly-scaffolded `skip init --transpiled-app … MVVMCSkipDemo` probe:
     - `Darwin/MVVMCSkipDemo.xcodeproj/` (real, working pbxproj — references the local SPM package at `..`)
@@ -166,6 +166,17 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   Path A wins on the *iOS-side* architectural-preservation axis (the entry chain is unchanged: `UIApplicationMain` → `AppDelegate` → `SceneDelegate` → `UITabBarController` → HostControllers, exactly as in the MVVMC baseline) AND on the *change-set size* axis (about 20 lines of edits vs Path E's dozens of access-modifier additions). Path B was rejected because rewriting the lifecycle entry point goes beyond the "minimal, necessary" budget set in M5.
 - **Verification**: `xcodebuild -project Darwin/MVVMCSkipDemo.xcodeproj -scheme "MVVMCSkipDemo App" -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation build` → **`** BUILD SUCCEEDED **`**. This is the **first iOS `.app` bundle ever produced by this repo's Skip-aware layout** — previous green builds were the library framework, not a launchable app.
 
+### M8 — `Project.xcworkspace` at repo root + `skip app launch --ios` verified (this commit)
+- **What**:
+  - Added `Project.xcworkspace/contents.xcworkspacedata` at the repo root, with a single `FileRef` pointing at `Darwin/MVVMCSkipDemo.xcodeproj`. The xcodeproj already references the local SPM package at `..`, so the workspace transitively sees `Package.swift` without a separate `FileRef`.
+  - `.gitignore` cleanup: removed the now-obsolete `*.xcodeproj/project.pbxproj` entry (XcodeGen-era — it would silently ignore the real, tracked `Darwin/MVVMCSkipDemo.xcodeproj/project.pbxproj` if someone re-cloned).
+- **Why**: Provides a single, canonical "open this" entry for both the Xcode IDE and the `skip` CLI. Without it, Xcode users would have to know to open `Darwin/MVVMCSkipDemo.xcodeproj` (a buried path) and the `skip` CLI would need explicit `-workspace` / `-project` flags. With the workspace at repo root, `open Project.xcworkspace` and `skip app launch --ios` both Just Work.
+- **Verification**:
+  - `xcodebuild -workspace Project.xcworkspace -scheme "MVVMCSkipDemo App" -destination 'generic/platform=iOS Simulator' build` → `** BUILD SUCCEEDED **`.
+  - **`skip app launch --ios --plain` → `[✓] Launch Skip app succeeded in 2.6s`**.
+  - `xcrun simctl listapps booted` confirms `com.joe.mvvmc.demo` is installed on the booted iPhone 17 simulator with a real `.app` bundle.
+  - Simulator screenshot confirms the app renders the existing MVVMC `PostList` screen with `Posts` / `Profile` tab bar — i.e. `AppDelegate → SceneDelegate → UITabBarController → UINavigationController → PostListHostController → PostListView` chain works end-to-end through the new SPM-as-source-of-truth layout. The iOS-side behaviour is identical to the MVVMC baseline.
+
 ---
 
 ## Next Steps (start here in the next session)
@@ -176,7 +187,7 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
 2. ~~**Add Skip scaffold** — `Skip.env`, `Sources/Skip/skip.yml`, swift-tools 6.1, skip / skip-ui deps. Plugin binding deferred to Step 7.~~ ✅ Done in M5.
 3. ~~**Restructure `Sources/Pages/` → `Sources/MVVMCSkipDemo/Pages/`** + module rename to `MVVMCSkipDemo`.~~ ✅ Done in M6.
 4. ~~**Add `Darwin/` shell**~~ ✅ Done in M7.
-5. **Add `Project.xcworkspace`** at repo root referencing `Package.swift` + `Darwin/MVVMCSkipDemo.xcodeproj`. Verify `skip app launch --ios` boots a real device/simulator build with the actual UIKit app running.
+5. ~~**Add `Project.xcworkspace`** at repo root + verify `skip app launch --ios`.~~ ✅ Done in M8.
 6. **Add `Android/` shell** — Gradle scaffolding, `Main.kt` entry, `settings.gradle.kts`. At this point `skip app launch --android` will not yet succeed (plugin still unbound); that's expected.
 7. **First real Skip adaptation — bind plugin + convert one feature end-to-end**:
    1. Bind the `skipstone` plugin to the `MVVMCDemo` target in `Package.swift`.
