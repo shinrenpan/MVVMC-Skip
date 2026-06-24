@@ -18,7 +18,7 @@ private final class TransitionStyleBox {
   init(_ style: AppRouter.TransitionStyle) { self.style = style }
 }
 
-private var appTransitionStyleKey: UInt8 = 0
+nonisolated(unsafe) private var appTransitionStyleKey: UInt8 = 0
 
 extension UIViewController {
   fileprivate var appTransitionStyle: AppRouter.TransitionStyle {
