@@ -1,170 +1,67 @@
 (繁體中文｜[English](./README.en.md))
 
-# MVVMC
+# MVVMC-Skip
 
-> 一套為 SwiftUI + UIKit 混合架構設計的 iOS 導航架構模式。
+> **MVVMC** + [Skip.tools](https://skip.tools)：把現有 MVVMC iOS 架構帶到 Android,**iOS 端零改動**。
 
-MVVMC 在 MVVM 基礎上加入 **HostController（C 層）**，解決 SwiftUI 在 UIKit 導航環境下的責任分離問題。四層職責嚴格分離，任一層的改動不影響其他層。
-
----
-
-## 四層架構
-
-| 層 | 檔案命名 | 職責 |
-|---|---|---|
-| M | `FeatureViewModel+Models.swift` | State / Domain Models / DTOs |
-| VM | `FeatureViewModel.swift` | `@Observable @MainActor`，`doAction` 單一進入點 |
-| V | `FeatureView.swift` | 純 SwiftUI，零導航邏輯、零業務邏輯 |
-| C | `FeatureHostController.swift` | UIKit 橋接，Router 導航唯一責任者 |
-
-```mermaid
-graph LR
-    M["M<br/>FeatureViewModel+Models<br/>-<br/>State<br/>Domain Models<br/>DTOs"]
-    VM["VM<br/>FeatureViewModel<br/>-<br/>@Observable @MainActor<br/>doAction 單一進入點"]
-    V["V<br/>FeatureView<br/>-<br/>純 SwiftUI<br/>零導航 · 零業務邏輯"]
-    C["C<br/>FeatureHostController<br/>-<br/>UIHostingController<br/>導航唯一責任者"]
-    AR(["AppRouter.shared<br/>唯一導航入口"])
-
-    M --> VM
-    VM -->|"@Observable 驅動"| V
-    V -->|"doAction"| VM
-    VM -->|"onRoute"| C
-    C -->|"to / back / sheet"| AR
-```
-
-### 資料流
-
-```mermaid
-flowchart TD
-    User([使用者操作]) --> V["View<br/>Task { await doAction(.view) }"]
-    V --> VM["ViewModel<br/>doAction dispatch"]
-    VM -->|".apiRequest"| API["API"]
-    API -->|".apiResponse"| VM
-    VM -.->|"更新 state，View 自動刷新"| V
-
-    VM -->|"onRoute"| HC["HostController"]
-    HC -->|"navigate"| AR["AppRouter.shared<br/>to / back / sheet / deeplink"]
-    AR --> Dest([目標畫面])
-
-    subgraph "跨 VC 回傳"
-        Child["子 ViewModel<br/>await onCallback?(.result)"] --> Parent["父 HostController<br/>back + 處理結果"]
-    end
-
-    VM -.->|callback| Child
-```
+MVVMC-Skip 不重寫架構、不重做導航,只用 `#if SKIP` / `#if !SKIP` 條件編譯,把 UIKit-based 的 C 層在 Android 端替換為 SwiftUI 等價物。iOS 使用者體驗、程式碼結構與主 [MVVMC](https://github.com/shinrenpan/MVVMC) 一致。
 
 ---
 
-## AppRouter
+## 與 MVVMC 系列的關係
 
-`AppRouter.shared` 是 App 唯一導航入口，HostController 不直接呼叫 `navigationController` / `present` / `dismiss`。
+|              | MVVMC                         | MVVMC-Skip（本 repo）              | [MVVMR-Skip](https://github.com/shinrenpan/MVVMR-Skip) |
+|---           |---                            |---                                 |---                                  |
+| C 層         | UIKit `HostController`        | UIKit `HostController`（保留）     | 改為 SwiftUI Router                 |
+| 跨平台手法   | (不跨平台)                    | `#if SKIP` 條件編譯,兩套導航實作   | 單一 SwiftUI codebase               |
+| iOS 行為     | 基準                          | **與基準完全一致**                 | 不一定等同基準                      |
+| 適用對象     | iOS-only 新專案               | **既有 MVVMC 專案要加 Android**    | 全新跨平台專案                      |
+| 對應文章     | (基準參考)                    | **文章 A**                         | 文章 C                              |
 
-```swift
-// Push（原生右滑返回）
-AppRouter.shared.to(DetailHostController(...), from: self)
-AppRouter.shared.to(FilterHostController(...), from: self, style: .modal)
-AppRouter.shared.to(SomeHostController(...), from: self, style: .fade)
-
-// Sheet
-AppRouter.shared.sheet(SettingsHostController(...), from: self)
-AppRouter.shared.sheet(SomeHostController(...), from: self, detents: [.medium()])
-
-// 後退（自動判斷 pop / dismiss）
-AppRouter.shared.back(from: self)
-AppRouter.shared.backTo(targetVC, from: self)
-AppRouter.shared.backToRoot(from: self)
-
-// Tab
-AppRouter.shared.tab(1, from: self)
-
-// Deeplink（fullScreen，自動注入 Close button）
-AppRouter.shared.deeplink(SomeHostController(...))
-```
+> MVVMC-Skip 的核心訴求是「不破壞既有 iOS 架構」。如果你的專案已經是 MVVMC,加 Android 支援時無需重構,只要補 `#else` 分支。
 
 ---
 
-## Deeplink / Push Notification
+## Baseline
 
-```swift
-// Sources/App/Deeplink.swift — URL 解析 + VC 建立集中在一個地方
-enum Deeplink {
-  case settings
-  case postDetail(id: Int)
-
-  init?(url: URL) { ... }
-
-  @MainActor func makeHostController() -> UIViewController { ... }
-}
-
-// SceneDelegate — 三個入口統一走 AppRouter.deeplink()
-func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-  guard let url = URLContexts.first?.url,
-        let deeplink = Deeplink(url: url) else { return }
-  AppRouter.shared.deeplink(deeplink.makeHostController())
-}
-```
-
-推播 payload 約定：`{ "deeplink": "myapp://posts/1" }`，`Deeplink(url:)` 直接複用。
-
----
-
-## MCP Server
-
-本 repo 附帶 MCP server，讓 Claude Code 在任何專案都能取得 MVVMC 規範。
-
-### 安裝
-
-```bash
-git clone https://github.com/shinrenpan/MVVMC
-cd MVVMC/mcp-server
-npm install && npm run build
-claude mcp add mvvmc -s user node "$PWD/dist/index.js"
-```
-
-### 提供的 Tools
-
-| Tool | 說明 |
+| 項目 | 值 |
 |---|---|
-| `get_architecture_overview` | 整體架構與資料流 |
-| `get_layer_guide` | 指定層（M / VM / V / C）規範與範例 |
-| `get_approuter_guide` | AppRouter 完整 API |
-| `get_deeplink_guide` | Deeplink + Push Notification 模式 |
+| Fork 自 | [shinrenpan/MVVMC](https://github.com/shinrenpan/MVVMC) |
+| Baseline 版本 | `v1.1.0` |
+| Baseline commit | [`db9013d`](https://github.com/shinrenpan/MVVMC/commit/db9013d) |
+| Skip 模式 | **Skip Lite**（Swift → Kotlin/Compose 轉譯） |
+
+> 第一個 commit 起即為 MVVMC v1.1.0 原貌,後續 commit 為加上 Skip 支援所做的最小幅度改動。
 
 ---
 
-## 這個 Repo
+## 為什麼選 Skip Lite
 
-| 目錄 | 用途 |
-|---|---|
-| `Sources/` | Demo 實作（可跑的 Xcode 專案） |
-| `mcp-server/` | MCP server 原始碼 |
-| `.claude/skills/` | Claude Code skill 規範 |
-
-### Demo 專案
-
-`project.pbxproj` 由 XcodeGen 產生，不納入版本控制。clone 後需先執行：
-
-```bash
-xcodegen generate
-open MVVMCDemo.xcodeproj
-```
-
-包含：
-
-- **PostList** — 完整四層，API 模擬、Router 導航、Filter（modal）、UserDetail（fade）
-- **PostDetail** — 跨 feature 傳 primitive，C 層組裝 ViewModel
-- **PostFilter** — `onCallback` 跨 VC 回傳範例
-- **UserDetail** — fade 轉場
-- **Profile** — Tab 導航（`AppRouter.tab()`）
-- **Settings** — Sheet 範例（`AppRouter.sheet()`）
-- **Deeplink Demo** — URL Scheme + Push Notification 觸發
+- **轉譯成真實 Kotlin + Compose**：Android 工程師可讀、可維護
+- **APK 小**：純 Kotlin 輸出,不需要打包 Swift runtime
+- **開源**：transpiler 與 runtime 模組皆開源
+- **學習副產物**：強迫理解 SwiftUI ↔ Compose 的概念對應
 
 ---
 
-## Tech Stack
+## Repo 狀態
 
-- iOS 17+
-- Swift 5.9+（Swift 6 concurrency 相容）
-- SwiftUI + UIKit 混合
-- `@Observable`（Swift Observation framework）
-- XcodeGen（`xcodegen generate` 更新 project file）
+🚧 **目前 private**,待**文章 A** 完成後公開。
+
+具體的 Skip 適配規則(哪些 API 要 guard、Android 側如何替代 `UINavigationController` 等)會在實作過程逐步寫入本 repo 的 `CLAUDE.md`,**不在動工前憑空寫**。
+
+---
+
+## 技術文章系列
+
+本 repo 對應系列文的**第一篇**。完整三篇規劃：
+
+- [ ] **文章 A** — MVVMC + Skip:用 `#if SKIP` 把現有 UIKit-nav 架構帶到 Android（**本 repo**）
+- [ ] **文章 B** — MVVMC → MVVMR:為什麼把 C 層從 UIKit HostController 改成 SwiftUI Router（對應 repo: `MVVMR`,規劃中）
+- [ ] **文章 C** — MVVMR + Skip:純 SwiftUI 單一架構跨平台（對應 repo: [`MVVMR-Skip`](https://github.com/shinrenpan/MVVMR-Skip),private）
+
+---
+
+## License
+
+[MIT](./LICENSE)

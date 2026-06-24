@@ -1,170 +1,67 @@
 ([繁體中文](./README.md)｜English)
 
-# MVVMC
+# MVVMC-Skip
 
-> A navigation architecture pattern designed for SwiftUI + UIKit hybrid iOS apps.
+> **MVVMC** + [Skip.tools](https://skip.tools): bring the existing MVVMC iOS architecture to Android with **zero changes on iOS**.
 
-MVVMC extends MVVM with a **HostController (C layer)** to solve the separation-of-concerns problem when SwiftUI runs inside a UIKit navigation environment. Each of the four layers has a strictly defined responsibility — changes in one layer don't affect the others.
-
----
-
-## Architecture
-
-| Layer | File Naming | Responsibility |
-|---|---|---|
-| M | `FeatureViewModel+Models.swift` | State / Domain Models / DTOs |
-| VM | `FeatureViewModel.swift` | `@Observable @MainActor`, single `doAction` entry point |
-| V | `FeatureView.swift` | Pure SwiftUI, zero navigation logic, zero business logic |
-| C | `FeatureHostController.swift` | UIKit bridge, sole owner of routing logic |
-
-```mermaid
-graph LR
-    M["M<br/>FeatureViewModel+Models<br/>-<br/>State<br/>Domain Models<br/>DTOs"]
-    VM["VM<br/>FeatureViewModel<br/>-<br/>@Observable @MainActor<br/>Single doAction entry point"]
-    V["V<br/>FeatureView<br/>-<br/>Pure SwiftUI<br/>Zero navigation · Zero business logic"]
-    C["C<br/>FeatureHostController<br/>-<br/>UIHostingController<br/>Sole routing owner"]
-    AR(["AppRouter.shared<br/>Single navigation entry point"])
-
-    M --> VM
-    VM -->|"@Observable drives"| V
-    V -->|"doAction"| VM
-    VM -->|"onRoute"| C
-    C -->|"to / back / sheet"| AR
-```
-
-### Data Flow
-
-```mermaid
-flowchart TD
-    User([User Interaction]) --> V["View<br/>Task { await doAction(.view) }"]
-    V --> VM["ViewModel<br/>doAction dispatch"]
-    VM -->|".apiRequest"| API["API"]
-    API -->|".apiResponse"| VM
-    VM -.->|"Update state, View re-renders automatically"| V
-
-    VM -->|"onRoute"| HC["HostController"]
-    HC -->|"navigate"| AR["AppRouter.shared<br/>to / back / sheet / deeplink"]
-    AR --> Dest([Destination Screen])
-
-    subgraph "Cross-VC Callback"
-        Child["Child ViewModel<br/>await onCallback?(.result)"] --> Parent["Parent HostController<br/>back + handle result"]
-    end
-
-    VM -.->|callback| Child
-```
+MVVMC-Skip doesn't rewrite the architecture or rework navigation — it uses `#if SKIP` / `#if !SKIP` conditional compilation to substitute a SwiftUI equivalent for the UIKit-based C layer on Android. iOS UX, code structure, and behaviour stay identical to the main [MVVMC](https://github.com/shinrenpan/MVVMC) repo.
 
 ---
 
-## AppRouter
+## Relationship to the MVVMC family
 
-`AppRouter.shared` is the single navigation entry point for the entire app. HostControllers never call `navigationController`, `present`, or `dismiss` directly.
+|              | MVVMC                         | MVVMC-Skip (this repo)             | [MVVMR-Skip](https://github.com/shinrenpan/MVVMR-Skip) |
+|---           |---                            |---                                 |---                                  |
+| C layer      | UIKit `HostController`        | UIKit `HostController` (preserved) | SwiftUI Router                      |
+| Cross-platform approach | (iOS only)         | `#if SKIP`, two navigation impls   | Single SwiftUI codebase             |
+| iOS behaviour | baseline                     | **identical to baseline**          | may diverge                         |
+| Target audience | new iOS-only project       | **existing MVVMC project adding Android** | new cross-platform project   |
+| Article      | (baseline reference)          | **Article A**                      | Article C                           |
 
-```swift
-// Push (native swipe-back supported)
-AppRouter.shared.to(DetailHostController(...), from: self)
-AppRouter.shared.to(FilterHostController(...), from: self, style: .modal)
-AppRouter.shared.to(SomeHostController(...), from: self, style: .fade)
-
-// Sheet
-AppRouter.shared.sheet(SettingsHostController(...), from: self)
-AppRouter.shared.sheet(SomeHostController(...), from: self, detents: [.medium()])
-
-// Back (auto-detects pop vs dismiss)
-AppRouter.shared.back(from: self)
-AppRouter.shared.backTo(targetVC, from: self)
-AppRouter.shared.backToRoot(from: self)
-
-// Tab
-AppRouter.shared.tab(1, from: self)
-
-// Deeplink (fullScreen present, auto-injects Close button)
-AppRouter.shared.deeplink(SomeHostController(...))
-```
+> MVVMC-Skip's core promise: existing iOS architecture is not disturbed. If your project is already MVVMC, adding Android support requires no refactor — only `#else` branches.
 
 ---
 
-## Deeplink / Push Notifications
+## Baseline
 
-```swift
-// Sources/App/Deeplink.swift — URL parsing + VC construction in one place
-enum Deeplink {
-  case settings
-  case postDetail(id: Int)
-
-  init?(url: URL) { ... }
-
-  @MainActor func makeHostController() -> UIViewController { ... }
-}
-
-// SceneDelegate — all three entry points call AppRouter.deeplink()
-func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-  guard let url = URLContexts.first?.url,
-        let deeplink = Deeplink(url: url) else { return }
-  AppRouter.shared.deeplink(deeplink.makeHostController())
-}
-```
-
-Push notification payload convention: `{ "deeplink": "myapp://posts/1" }` — reuses `Deeplink(url:)` directly, no extra parsing logic needed.
-
----
-
-## MCP Server
-
-This repo ships an MCP server so Claude Code can access MVVMC guidelines from any project.
-
-### Setup
-
-```bash
-git clone https://github.com/shinrenpan/MVVMC
-cd MVVMC/mcp-server
-npm install && npm run build
-claude mcp add mvvmc -s user node "$PWD/dist/index.js"
-```
-
-### Available Tools
-
-| Tool | Description |
+| Item | Value |
 |---|---|
-| `get_architecture_overview` | Overall architecture and data flow |
-| `get_layer_guide` | Guidelines and examples for a specific layer (M / VM / V / C) |
-| `get_approuter_guide` | Full AppRouter API reference |
-| `get_deeplink_guide` | Deeplink + Push Notification patterns |
+| Forked from | [shinrenpan/MVVMC](https://github.com/shinrenpan/MVVMC) |
+| Baseline version | `v1.1.0` |
+| Baseline commit | [`db9013d`](https://github.com/shinrenpan/MVVMC/commit/db9013d) |
+| Skip mode | **Skip Lite** (Swift → Kotlin/Compose transpilation) |
+
+> The first commit is an exact mirror of MVVMC v1.1.0; subsequent commits introduce the minimum changes needed to enable Skip.
 
 ---
 
-## This Repo
+## Why Skip Lite
 
-| Directory | Purpose |
-|---|---|
-| `Sources/` | Demo implementation (runnable Xcode project) |
-| `mcp-server/` | MCP server source |
-| `.claude/skills/` | Claude Code skill guidelines |
-
-### Demo Project
-
-`project.pbxproj` is generated by XcodeGen and excluded from version control. After cloning, run:
-
-```bash
-xcodegen generate
-open MVVMCDemo.xcodeproj
-```
-
-Demo includes:
-
-- **PostList** — Full four-layer implementation: mock API, Router navigation, Filter (modal), UserDetail (fade)
-- **PostDetail** — Cross-feature primitive passing, ViewModel assembled in C layer
-- **PostFilter** — `onCallback` cross-VC callback example
-- **UserDetail** — Fade transition
-- **Profile** — Tab navigation (`AppRouter.tab()`)
-- **Settings** — Sheet example (`AppRouter.sheet()`)
-- **Deeplink Demo** — URL Scheme + Push Notification triggers
+- **Transpiles to real Kotlin + Compose**: Android engineers can read and maintain the output
+- **Small APK**: pure Kotlin output, no Swift runtime bundling
+- **Open source**: both transpiler and runtime are open source
+- **Learning byproduct**: forces understanding of the SwiftUI ↔ Compose concept mapping
 
 ---
 
-## Tech Stack
+## Repo status
 
-- iOS 17+
-- Swift 5.9+ (Swift 6 concurrency compatible)
-- SwiftUI + UIKit hybrid
-- `@Observable` (Swift Observation framework)
-- XcodeGen (`xcodegen generate` to regenerate project file)
+🚧 **Currently private**, to be made public after **Article A** ships.
+
+Concrete Skip adaptation rules (which APIs need guards, how to substitute `UINavigationController` on the Android side, etc.) will be added to this repo's `CLAUDE.md` as the implementation progresses — **not invented up front**.
+
+---
+
+## Article series
+
+This repo backs the **first** article in a planned three-part series:
+
+- [ ] **Article A** — MVVMC + Skip: bring the existing UIKit-nav architecture to Android via `#if SKIP` (**this repo**)
+- [ ] **Article B** — MVVMC → MVVMR: why the C layer moves from UIKit HostController to a SwiftUI Router (repo: `MVVMR`, planned)
+- [ ] **Article C** — MVVMR + Skip: a single SwiftUI codebase for iOS + Android (repo: [`MVVMR-Skip`](https://github.com/shinrenpan/MVVMR-Skip), private)
+
+---
+
+## License
+
+[MIT](./LICENSE)
