@@ -177,7 +177,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `xcrun simctl listapps booted` confirms `com.joe.mvvmc.demo` is installed on the booted iPhone 17 simulator with a real `.app` bundle.
   - Simulator screenshot confirms the app renders the existing MVVMC `PostList` screen with `Posts` / `Profile` tab bar — i.e. `AppDelegate → SceneDelegate → UITabBarController → UINavigationController → PostListHostController → PostListView` chain works end-to-end through the new SPM-as-source-of-truth layout. The iOS-side behaviour is identical to the MVVMC baseline.
 
-### M9 — `Android/` shell + expected-failure verification (this commit)
+### M9 — `Android/` shell + expected-failure verification (commit `1ba78fa` + `6e6dcb1`)
 - **What**:
   - Copied the Android/ scaffold from a fresh `skip init --transpiled-app MVVMCSkipDemo` probe: `app/build.gradle.kts`, `app/src/main/AndroidManifest.xml`, `app/src/main/kotlin/Main.kt` (the Skip-canonical `AndroidAppMain` + `MainActivity`), `app/src/main/res/mipmap-*` launcher icons, `gradle/wrapper/gradle-wrapper.properties`, `gradle.properties`, `settings.gradle.kts`. Dropped `fastlane/`.
   - Updated `Darwin/MVVMCSkipDemo.xcconfig` comment: `SKIP_ACTION` stays `none` until Step 7 (plugin binding + first-feature conversion), not Step 6 as the previous comment claimed. The reason is now precise: with the plugin unbound, no transpiled Kotlin module exists for `MVVMCSkipDemo`, so `gradle launchDebug` would fail mid-build, not at startup.
@@ -186,6 +186,34 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `xcodebuild -workspace Project.xcworkspace -scheme "MVVMCSkipDemo App" -destination 'generic/platform=iOS Simulator' build` → `** BUILD SUCCEEDED **` (iOS path unchanged).
   - `cd Android && gradle :app:assembleDebug` → fails with the expected `e: Could not locate transpiled module for MVVMCSkipDemo in .../.build/plugins/outputs`. This is the exact failure mode the original Plan predicted for "skip app launch --android" at this stage: shell present, gradle invokable, blocked only on the missing Skip-plugin output. **This failure is the start signal for Step 7.**
   - `skip app launch --android` *does not yet* exercise this code path because `SKIP_ACTION=none` short-circuits the iOS-xcodebuild's gradle phase to a noop. The honest "Android does not yet build" demonstration comes from running gradle directly, as documented above.
+
+### M10 — Step 7a: bind `skipstone` plugin to the target (this commit)
+- **What**: `Package.swift` now binds `plugins: [.plugin(name: "skipstone", package: "skip")]` to both the `MVVMCSkipDemo` library target and the `MVVMCSkipDemoTests` test target. Removed the previous deferral comment ("intentionally not yet bound… see M5"). No other code touched.
+- **Why**: iOS xcodebuild is intentionally allowed to go red in this commit. The point of 7a is to let Skip's transpiler look at the codebase for the first time, and use **what it complains about first** to set the agenda for 7b/7c/7d. Binding-without-fixing is a deliberate diagnostic step.
+- **Journey** — what we actually saw, vs. what M5 predicted:
+
+  *Prediction (M5).* M5's Journey listed three classes of issue Skip would hit when given the codebase: Swift 6 strict concurrency, Kotlin constructor delegation, Skip's weaker type inference on nested leading-dot enums. M5 framed this as "an avalanche", and on that basis I deferred the plugin binding to a later step.
+
+  *Reality (M10).* `skipstone` is **fail-fast**: it reports the *first* error and stops. So binding the plugin doesn't produce an avalanche — it produces exactly one error per build, with the rest of the codebase un-attempted.
+
+  *The first error* was, alphabetically by file path, `Sources/MVVMCSkipDemo/Pages/UserDetail/UserDetailHostController.swift:10:52`:
+  ```
+  In Kotlin, delegating calls to 'self' or 'super' constructors can not use
+  local variables other than the parameters passed to this constructor
+  ```
+  pointing at the `viewModel` local being passed into `super.init(rootView:)`. This is exactly M5's "issue (2)" — and it's also exactly the kind of thing 7b's `#if !SKIP` wrapping will *invisibilize*, not fix.
+
+  *What this changes for the rest of Step 7.* The plan stays the same, but the framing improves. Each sub-step now has a precise "what error frontier moves to next" narrative beat:
+  - 7b — wrap all `*HostController.swift` + UIKit-only `App/*.swift` files in `#if !SKIP`. The HostController-class errors disappear; the next frontier should be the VM-layer leading-dot enum issues (M5's "issue (3)").
+  - 7c — rewrite Settings VM for Skip-friendly type inference; that feature transpiles clean.
+  - 7d — Android root view + `skip app launch --android` → first Android render.
+
+  *Why this is good news for the article.* "Avalanche" was a richer image, but fail-fast is a more honest one. Skip's diagnostic shape mirrors how a careful engineer would attack the same codebase — peel one onion layer at a time. The article can lean on this: instead of needing to triage a wall of errors, you watch Skip walk through the codebase with you, surfacing the next issue once the current one is out of the way.
+
+- **Verification**:
+  - `xcodebuild … build` → **`** BUILD FAILED **`**. Failure is in the `Skip MVVMCSkipDemo` custom build task; `exit=65`.
+  - `grep "error:" /tmp/step7a-build.log | sort -u` → exactly **1** distinct error, at `UserDetailHostController.swift:10:52`. (Compare to a hypothetical avalanche: dozens of unique errors.)
+  - iOS app target therefore does not produce a runnable `.app` in this commit. This is the only red commit in the chain; 7b restores green.
 
 ---
 
@@ -199,12 +227,11 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
 4. ~~**Add `Darwin/` shell**~~ ✅ Done in M7.
 5. ~~**Add `Project.xcworkspace`** at repo root + verify `skip app launch --ios`.~~ ✅ Done in M8.
 6. ~~**Add `Android/` shell**~~ ✅ Done in M9. `gradle :app:assembleDebug` fails with the expected "Could not locate transpiled module for MVVMCSkipDemo" — the start signal for Step 7.
-7. **First real Skip adaptation — bind plugin + convert one feature end-to-end**:
-   1. Bind the `skipstone` plugin to the `MVVMCDemo` target in `Package.swift`.
-   2. Wrap `AppDelegate`, `SceneDelegate`, `AppRouter`, `Deeplink`, and *all* `*HostController.swift` files in `#if !SKIP` (mechanical file-level wrap; no logic edits).
-   3. Pick the smallest feature (likely `Settings`) and convert its ViewModel to Skip-friendly Swift style: lift nested leading-dot enums into explicitly-typed `let` bindings (see `MVVMR-Skip/.../UserDetailViewModel.swift` for the pattern).
-   4. Add an Android-side entry: a SwiftUI shell (`@main` or equivalent) + a router stub that mounts the `Settings` view.
-   5. `skip app launch --android` should now reach a running Android app showing the Settings screen.
+7. **First real Skip adaptation — bind plugin + convert one feature end-to-end**. Broken into four sub-commits:
+   - **7a** — Bind the `skipstone` plugin to the `MVVMCSkipDemo` target. iOS xcodebuild goes red (intentionally) with one fail-fast error from Skip. ✅ Done in M10.
+   - **7b** — Wrap all `*HostController.swift` + UIKit-only App-layer files in `#if !SKIP`. iOS back to green; Skip's error frontier moves to the VM layer.
+   - **7c** — Rewrite Settings VM for Skip-friendly type inference (lift nested leading-dot enums into explicitly-typed `let` bindings, à la `MVVMR-Skip/.../UserDetailViewModel.swift`). Settings transpiles clean.
+   - **7d** — Add an Android root view + wire to `Android/.../Main.kt`. Flip `SKIP_ACTION = launch`. Run `skip app launch --android` → first Android render. Screenshot.
 8. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
 
 Each step's `Why:` and any gotchas land back in the Migration Log above as they happen.

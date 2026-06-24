@@ -14,16 +14,13 @@ let package = Package(
     .package(url: "https://source.skip.tools/skip-ui.git", from: "1.0.0"),
   ],
   targets: [
-    // NOTE: The `skipstone` plugin is intentionally not yet bound to these targets.
-    // It will be wired in a later step alongside the per-feature `#if !SKIP`
-    // wrapping + ViewModel rewrites, so iOS xcodebuild stays green throughout.
-    // See Migration Log M5 for the reasoning.
     .target(
       name: "MVVMCSkipDemo",
       dependencies: [
         .product(name: "SkipUI", package: "skip-ui"),
       ],
-      path: "Sources/MVVMCSkipDemo"
+      path: "Sources/MVVMCSkipDemo",
+      plugins: [.plugin(name: "skipstone", package: "skip")]
     ),
     .testTarget(
       name: "MVVMCSkipDemoTests",
@@ -31,7 +28,8 @@ let package = Package(
         "MVVMCSkipDemo",
         .product(name: "SkipTest", package: "skip"),
       ],
-      path: "Tests"
+      path: "Tests",
+      plugins: [.plugin(name: "skipstone", package: "skip")]
     ),
   ]
 )

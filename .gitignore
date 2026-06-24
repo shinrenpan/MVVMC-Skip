@@ -5,3 +5,9 @@ xcuserdata/
 DerivedData/
 .build/
 .swiftpm/
+
+# Android build cache
+Android/.gradle/
+Android/build/
+Android/app/build/
+Android/local.properties
