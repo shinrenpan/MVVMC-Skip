@@ -1,17 +1,22 @@
 import UIKit
 import UserNotifications
 
+// `public` so UIKit's `NSClassFromString("$(PRODUCT_MODULE_NAME).SceneDelegate")`
+// in Info.plist's scene manifest resolves to this class across the library
+// boundary.
 @MainActor
-final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
-  var window: UIWindow?
+public final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+  public override init() { super.init() }
 
-  func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+  public var window: UIWindow?
+
+  public func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
     guard let url = URLContexts.first?.url,
           let deeplink = Deeplink(url: url) else { return }
     AppRouter.shared.deeplink(deeplink.makeHostController())
   }
 
-  func scene(
+  public func scene(
     _ scene: UIScene,
     willConnectTo session: UISceneSession,
     options connectionOptions: UIScene.ConnectionOptions
@@ -45,7 +50,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 // MARK: - UNUserNotificationCenterDelegate
 
 extension SceneDelegate: UNUserNotificationCenterDelegate {
-  nonisolated func userNotificationCenter(
+  public nonisolated func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
@@ -57,7 +62,7 @@ extension SceneDelegate: UNUserNotificationCenterDelegate {
     Task { @MainActor in AppRouter.shared.deeplink(deeplink.makeHostController()) }
   }
 
-  nonisolated func userNotificationCenter(
+  public nonisolated func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void

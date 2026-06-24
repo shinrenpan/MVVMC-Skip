@@ -23,10 +23,7 @@ let package = Package(
       dependencies: [
         .product(name: "SkipUI", package: "skip-ui"),
       ],
-      path: "Sources/MVVMCSkipDemo",
-      exclude: [
-        "App/Info.plist",
-      ]
+      path: "Sources/MVVMCSkipDemo"
     ),
     .testTarget(
       name: "MVVMCSkipDemoTests",
