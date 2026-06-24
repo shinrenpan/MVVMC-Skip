@@ -187,7 +187,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `cd Android && gradle :app:assembleDebug` → fails with the expected `e: Could not locate transpiled module for MVVMCSkipDemo in .../.build/plugins/outputs`. This is the exact failure mode the original Plan predicted for "skip app launch --android" at this stage: shell present, gradle invokable, blocked only on the missing Skip-plugin output. **This failure is the start signal for Step 7.**
   - `skip app launch --android` *does not yet* exercise this code path because `SKIP_ACTION=none` short-circuits the iOS-xcodebuild's gradle phase to a noop. The honest "Android does not yet build" demonstration comes from running gradle directly, as documented above.
 
-### M10 — Step 7a: bind `skipstone` plugin to the target (this commit)
+### M10 — Step 7a: bind `skipstone` plugin to the target (commit `fa063a9`)
 - **What**: `Package.swift` now binds `plugins: [.plugin(name: "skipstone", package: "skip")]` to both the `MVVMCSkipDemo` library target and the `MVVMCSkipDemoTests` test target. Removed the previous deferral comment ("intentionally not yet bound… see M5"). No other code touched.
 - **Why**: iOS xcodebuild is intentionally allowed to go red in this commit. The point of 7a is to let Skip's transpiler look at the codebase for the first time, and use **what it complains about first** to set the agenda for 7b/7c/7d. Binding-without-fixing is a deliberate diagnostic step.
 - **Journey** — what we actually saw, vs. what M5 predicted:
@@ -215,6 +215,45 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `grep "error:" /tmp/step7a-build.log | sort -u` → exactly **1** distinct error, at `UserDetailHostController.swift:10:52`. (Compare to a hypothetical avalanche: dozens of unique errors.)
   - iOS app target therefore does not produce a runnable `.app` in this commit. This is the only red commit in the chain; 7b restores green.
 
+### M11 — Step 7b: wrap iOS-only files in `#if !SKIP` (this commit)
+- **What**: Top-and-tail wrapped these 10 files with `#if !SKIP` / `#endif`. No content changes inside, no logic edits.
+  - `Sources/MVVMCSkipDemo/App/AppDelegate.swift`
+  - `Sources/MVVMCSkipDemo/App/AppRouter.swift`
+  - `Sources/MVVMCSkipDemo/App/Deeplink.swift`
+  - `Sources/MVVMCSkipDemo/App/SceneDelegate.swift`
+  - `Sources/MVVMCSkipDemo/Pages/{PostDetail,PostFilter,PostList,Profile,Settings,UserDetail}/<Feature>HostController.swift`
+- **Why**: Make UIKit-touching files invisible to Skip's transpiler. These files have legitimate iOS-only patterns (UIKit class inheritance, `UIApplicationDelegate` conformance, `super.init(rootView:)` calls that reference local variables) that have no Kotlin equivalent — they shouldn't be transpiled, they should be excluded. `#if !SKIP` is the Skip-canonical way to do that without moving files around.
+- **Journey** — the frontier moves, but not to where M5 predicted:
+
+  *Prediction (M5).* "Wrapping UIKit-only files should leave only the VM-layer `.success(dto)` leading-dot-enum issues for Skip to complain about."
+
+  *Reality (M11).* HostController constructor-delegation errors are gone (correct prediction). But the *next* error frontier isn't in a ViewModel — it's in a **View**:
+  ```
+  Sources/MVVMCSkipDemo/Pages/UserDetail/UserDetailView.swift:9:48:
+  error: Kotlin does not support where conditions in case and catch matches.
+  Consider using an if statement within the case or catch body
+  ```
+  The offending pattern is the SwiftUI-idiomatic `switch` with a guard:
+  ```swift
+  switch viewModel.state.api.fetchUser {
+  case .loading where viewModel.state.user == nil:
+      ProgressView()
+  ...
+  }
+  ```
+  Swift's pattern-matching `case … where` has no direct Kotlin equivalent. The fix per Skip's hint is to drop the `where` and put the condition inside the case body as an `if`.
+
+  *Why M5's prediction was incomplete.* M5 had only run the plugin briefly and only seen errors in `UserDetailViewModel`. It generalized that into "VM-layer is the frontier." In reality each layer can have its own Skip-incompatible patterns — Views have `case … where`, ViewModels have nested leading-dot enums, HostControllers have constructor delegation. **Skip's transpile gauntlet is wider than one layer.**
+
+  *What this changes for 7c.* The original plan ("rewrite Settings VM, watch Settings transpile clean") was based on the assumption that the only obstacles are VM-layer ones in features other than Settings. Now we know: Skip is **fail-fast across the whole module**, so it never reaches Settings's VM until it gets past every issue that appears alphabetically earlier — including `UserDetailView`. So 7c is no longer "rewrite Settings". It's "rewrite issues in the order Skip surfaces them, until the entire module transpiles clean." That's a longer sub-step than originally planned.
+
+  *Side note on iOS xcodebuild.* iOS is still red in 7b. The `#if !SKIP` wrap removes the input that broke Skip's transpile in 7a, but Skip's gauntlet is now blocked by the next issue (`UserDetailView`'s `case where`) before the plugin task can finish — so the build-tool plugin task still fails and the iOS app target can't reach the link step. **iOS returns to green only when Skip's transpile of the whole module succeeds**, i.e. at the end of 7c. This is a clarification of the earlier promise "7b restores green" in M10 — wrong in retrospect, corrected here.
+
+- **Verification**:
+  - `xcodebuild … build` → still `** BUILD FAILED **`, exit 65.
+  - `grep "error:" /tmp/step7b-build.log | sort -u` → exactly **1** distinct error, this time at `UserDetailView.swift:9:48` (`case where`), not at any `HostController.swift`.
+  - The HostController family of errors is invisible to Skip — confirmed by `grep -l "HostController" /tmp/step7b-build.log` returning no transpile-error matches.
+
 ---
 
 ## Next Steps (start here in the next session)
@@ -229,8 +268,8 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
 6. ~~**Add `Android/` shell**~~ ✅ Done in M9. `gradle :app:assembleDebug` fails with the expected "Could not locate transpiled module for MVVMCSkipDemo" — the start signal for Step 7.
 7. **First real Skip adaptation — bind plugin + convert one feature end-to-end**. Broken into four sub-commits:
    - **7a** — Bind the `skipstone` plugin to the `MVVMCSkipDemo` target. iOS xcodebuild goes red (intentionally) with one fail-fast error from Skip. ✅ Done in M10.
-   - **7b** — Wrap all `*HostController.swift` + UIKit-only App-layer files in `#if !SKIP`. iOS back to green; Skip's error frontier moves to the VM layer.
-   - **7c** — Rewrite Settings VM for Skip-friendly type inference (lift nested leading-dot enums into explicitly-typed `let` bindings, à la `MVVMR-Skip/.../UserDetailViewModel.swift`). Settings transpiles clean.
+   - **7b** — Wrap all `*HostController.swift` + UIKit-only App-layer files in `#if !SKIP`. ✅ Done in M11. Discovered the frontier moves to a *View* (`case where`), not a VM as M5 predicted.
+   - **7c** — Fix Skip-transpile issues in the order Skip surfaces them, until the entire `MVVMCSkipDemo` module transpiles. Expected patterns to fix: `case … where` in Views, nested leading-dot enums in VMs, plus anything else surfaced by working through the gauntlet. iOS returns to green when the gauntlet completes.
    - **7d** — Add an Android root view + wire to `Android/.../Main.kt`. Flip `SKIP_ACTION = launch`. Run `skip app launch --android` → first Android render. Screenshot.
 8. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
 

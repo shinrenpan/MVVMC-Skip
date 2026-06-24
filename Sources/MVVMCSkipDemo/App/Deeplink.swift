@@ -1,3 +1,4 @@
+#if !SKIP
 import UIKit
 
 // MARK: - Deeplink
@@ -37,3 +38,4 @@ extension Deeplink {
     }
   }
 }
+#endif

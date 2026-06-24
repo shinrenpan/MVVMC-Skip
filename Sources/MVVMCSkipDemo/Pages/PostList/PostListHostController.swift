@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 @MainActor
@@ -53,3 +54,4 @@ private extension PostListHostController {
     }
   }
 }
+#endif

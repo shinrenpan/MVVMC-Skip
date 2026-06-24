@@ -1,3 +1,4 @@
+#if !SKIP
 import UIKit
 import UserNotifications
 
@@ -70,3 +71,4 @@ extension SceneDelegate: UNUserNotificationCenterDelegate {
     completionHandler([.banner, .sound])
   }
 }
+#endif

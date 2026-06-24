@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 @MainActor
@@ -13,3 +14,4 @@ final class UserDetailHostController: UIHostingController<UserDetailView> {
   @available(*, unavailable)
   required init?(coder: NSCoder) { fatalError() }
 }
+#endif

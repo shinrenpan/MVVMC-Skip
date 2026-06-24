@@ -1,3 +1,4 @@
+#if !SKIP
 import UIKit
 
 // MARK: - TransitionStyle
@@ -230,3 +231,4 @@ private extension AppTransitionAnimator {
     }
   }
 }
+#endif

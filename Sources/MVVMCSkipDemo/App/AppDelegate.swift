@@ -1,3 +1,4 @@
+#if !SKIP
 import UIKit
 
 // `@main` lives in Darwin/Sources/Main.swift (an iOS app target can only
@@ -15,3 +16,4 @@ public final class AppDelegate: UIResponder, UIApplicationDelegate {
     UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
   }
 }
+#endif

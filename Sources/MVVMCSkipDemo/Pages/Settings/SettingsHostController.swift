@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 @MainActor
@@ -30,3 +31,4 @@ private extension SettingsHostController {
     }
   }
 }
+#endif

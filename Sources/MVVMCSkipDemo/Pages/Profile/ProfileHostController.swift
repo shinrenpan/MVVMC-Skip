@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 @MainActor
@@ -34,3 +35,4 @@ private extension ProfileHostController {
     }
   }
 }
+#endif

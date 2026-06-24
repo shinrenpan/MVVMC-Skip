@@ -1,3 +1,4 @@
+#if !SKIP
 import SwiftUI
 
 @MainActor
@@ -12,3 +13,4 @@ final class PostFilterHostController: UIHostingController<PostFilterView> {
   @available(*, unavailable)
   required init?(coder: NSCoder) { fatalError() }
 }
+#endif
