@@ -87,9 +87,12 @@ extension PostListViewModel {
       state.api.fetchPosts = .loading
       do {
         let dtos = try await PostListAPI.fetch(userId: userId)
-        await doAction(.apiResponse(.fetchPosts(.success(dtos))))
+        // Lifted into a typed let for Skip's transpiler — see UserDetailViewModel.
+        let result: Result<[PostDTO], APIError> = .success(dtos)
+        await doAction(.apiResponse(.fetchPosts(result)))
       } catch {
-        await doAction(.apiResponse(.fetchPosts(.failure(.message(error.localizedDescription)))))
+        let result: Result<[PostDTO], APIError> = .failure(.message(error.localizedDescription))
+        await doAction(.apiResponse(.fetchPosts(result)))
       }
     }
   }
@@ -103,12 +106,19 @@ extension PostListViewModel {
   }
 
   private func handleAPIResponse(_ response: APIResponse) async {
+    // Nested case destructuring split into outer/inner switches — see UserDetailViewModel.
     switch response {
-    case let .fetchPosts(.success(dtos)):
-      state.posts = dtos.map { $0.toDomain() }
-      state.api.fetchPosts = .success
-    case let .fetchPosts(.failure(.message(msg))):
-      state.api.fetchPosts = .error(msg)
+    case let .fetchPosts(result):
+      switch result {
+      case let .success(dtos):
+        state.posts = dtos.map { $0.toDomain() }
+        state.api.fetchPosts = .success
+      case let .failure(error):
+        switch error {
+        case let .message(msg):
+          state.api.fetchPosts = .error(msg)
+        }
+      }
     }
   }
 }

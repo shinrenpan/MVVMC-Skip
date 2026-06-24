@@ -58,9 +58,14 @@ extension UserDetailViewModel {
       state.api.fetchUser = .loading
       do {
         let dto = try await UserDetailAPI.fetch(userId: userId)
-        await doAction(.apiResponse(.fetchUserDidFinish(.success(dto))))
+        // Lifted into a typed let so Skip's transpiler can infer the
+        // owning type of `.success` (it can't see through nested
+        // leading-dot enums the way Swift's compiler can).
+        let result: Result<UserDTO, APIError> = .success(dto)
+        await doAction(.apiResponse(.fetchUserDidFinish(result)))
       } catch {
-        await doAction(.apiResponse(.fetchUserDidFinish(.failure(.message(error.localizedDescription)))))
+        let result: Result<UserDTO, APIError> = .failure(.message(error.localizedDescription))
+        await doAction(.apiResponse(.fetchUserDidFinish(result)))
       }
     }
   }
@@ -74,12 +79,21 @@ extension UserDetailViewModel {
   }
 
   private func handleAPIResponse(_ response: APIResponse) async {
+    // Skip can't destructure nested enum patterns in a single `case`
+    // (e.g. `case let .fetchUserDidFinish(.success(dto))`), so the
+    // destructuring is split into one outer switch + inner switches.
     switch response {
-    case let .fetchUserDidFinish(.success(dto)):
-      state.user = dto.toDomain()
-      state.api.fetchUser = .success
-    case let .fetchUserDidFinish(.failure(.message(msg))):
-      state.api.fetchUser = .error(msg)
+    case let .fetchUserDidFinish(result):
+      switch result {
+      case let .success(dto):
+        state.user = dto.toDomain()
+        state.api.fetchUser = .success
+      case let .failure(error):
+        switch error {
+        case let .message(msg):
+          state.api.fetchUser = .error(msg)
+        }
+      }
     }
   }
 }

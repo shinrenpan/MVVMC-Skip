@@ -215,7 +215,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `grep "error:" /tmp/step7a-build.log | sort -u` → exactly **1** distinct error, at `UserDetailHostController.swift:10:52`. (Compare to a hypothetical avalanche: dozens of unique errors.)
   - iOS app target therefore does not produce a runnable `.app` in this commit. This is the only red commit in the chain; 7b restores green.
 
-### M11 — Step 7b: wrap iOS-only files in `#if !SKIP` (this commit)
+### M11 — Step 7b: wrap iOS-only files in `#if !SKIP` (commit `71b9284`)
 - **What**: Top-and-tail wrapped these 10 files with `#if !SKIP` / `#endif`. No content changes inside, no logic edits.
   - `Sources/MVVMCSkipDemo/App/AppDelegate.swift`
   - `Sources/MVVMCSkipDemo/App/AppRouter.swift`
@@ -254,6 +254,40 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `grep "error:" /tmp/step7b-build.log | sort -u` → exactly **1** distinct error, this time at `UserDetailView.swift:9:48` (`case where`), not at any `HostController.swift`.
   - The HostController family of errors is invisible to Skip — confirmed by `grep -l "HostController" /tmp/step7b-build.log` returning no transpile-error matches.
 
+### M12 — Step 7c: run the Skip transpile gauntlet (this commit)
+- **What**: Fixed every Skip-incompatible Swift pattern in the order Skip surfaced them, until the entire `MVVMCSkipDemo` module transpiles to Kotlin without error. Three files touched:
+  - `UserDetailView.swift` — rewrote `case .loading where viewModel.state.user == nil` into `case .loading` + `if let user = … else { ProgressView() }`. Semantics preserved (still falls back to displaying the cached user when reloading).
+  - `UserDetailViewModel.swift` — at API call sites (`fetchUser`), lifted `.success(dto)` / `.failure(.message(…))` into explicitly-typed `let result: Result<UserDTO, APIError> = …`. In `handleAPIResponse`, split `case let .fetchUserDidFinish(.success(dto))` (nested destructuring in one `case`) into outer `case let .fetchUserDidFinish(result)` + inner `switch result`.
+  - `PostListViewModel.swift` — same two transforms as `UserDetailViewModel`. Pattern is identical because both VMs follow MVVMC's `apiRequest` / `apiResponse` shape.
+  - `PostListView.swift` — same `case .loading where posts.isEmpty` rewrite as `UserDetailView`. Plus a separate single-line `#if !SKIP` wrap around `.contentShape(Rectangle())` (modifier not yet implemented in SkipUI).
+- **Why**: Three classes of Skip-incompatible Swift pattern existed in this codebase, in exactly two layers (V, VM). Each had a small, mechanical fix:
+  1. `case … where` → move guard into case body as `if`.
+  2. Nested leading-dot enum in call site → lift into explicitly-typed `let`.
+  3. Nested case destructuring → outer match + inner `switch`.
+  
+  All three are well-documented Skip-friendly idioms (MVVMR-Skip uses the same shapes). None of them required architectural changes — they are syntactic accommodations to Kotlin's stricter grammar. The MVVMC architecture (M / VM / V / C, `doAction` single entry, `Router` enums, `@Observable` ViewModel) survived intact.
+- **Journey** — the gauntlet as it actually ran:
+
+  *The expected ordeal.* 7b's M11 entry warned that 7c would be "longer than originally planned" because Skip is fail-fast across the whole module — to make the article's target feature (Settings) transpile, every alphabetically-earlier file with Skip-incompatible patterns has to be fixed first.
+
+  *The actual count.* Four rebuilds, four fixes:
+  - **R1**: `UserDetailView.swift:9:48` — `case where` → if-in-body. ✅
+  - **R2**: `UserDetailViewModel.swift` — five errors at lines 61 / 63 / 78 / 81, two patterns (lifted enum + split nested case). ✅
+  - **R3**: `PostListViewModel.swift` — same two patterns as R2. Five errors, same fix shape. ✅
+  - **R4**: `PostListView.swift:9` (`case where`) + `:62` (`.contentShape` not in SkipUI). ✅
+
+  *The pleasant surprise.* After R4, `xcodebuild` returned `** BUILD SUCCEEDED **`. The other four feature ViewModels (`PostDetailViewModel`, `PostFilterViewModel`, `ProfileViewModel`, `SettingsViewModel`) and their Views needed **zero** Skip-targeted edits — because their state shapes don't include `Result<X, APIError>` payloads and their Views don't use `case … where`. The module's Skip surface area was smaller than M11 feared.
+
+  *What this changes for 7d.* Originally 7d was framed as "Android renders Settings only", on the assumption that only Settings would be transpile-clean by end of 7c. With the entire module transpile-clean, 7d can target **any** feature. The full MVVMC tab-bar app is, in principle, available to Android — pending only the Android root-view wiring.
+
+  *The MVVMC architecture verdict at this checkpoint.* `doAction(.apiResponse(…))` with nested enum payloads is the one MVVMC idiom Skip pushes back on. Lifting the payload into a local `let` and splitting the case match preserves the doAction pattern's call shape on iOS while making it Skip-transpilable. The article can claim: *MVVMC's architecture survives Skip with zero changes; only two well-localised Swift idioms (nested leading-dot enums, nested case destructuring) get lifted into a more verbose-but-equivalent form.*
+
+- **Verification**:
+  - `xcodebuild … build` → `** BUILD SUCCEEDED **`, exit 0.
+  - `find … mvvmc-skip.output … -name "*.kt" | wc -l` → **62 Kotlin files generated** for the `MVVMCSkipDemo` module. (Files inside `#if !SKIP` blocks generate empty/minimal Kotlin stubs, but the transpiler does inspect them.)
+  - `skip app launch --ios --plain` → `[✓] Launch Skip app succeeded in 8.8s`. iOS behaviour confirmed unchanged after the V/VM edits.
+  - All four touched files preserve their original control-flow semantics (verified by inspection of pre/post diffs and by iOS app continuing to render correctly).
+
 ---
 
 ## Next Steps (start here in the next session)
@@ -269,7 +303,7 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
 7. **First real Skip adaptation — bind plugin + convert one feature end-to-end**. Broken into four sub-commits:
    - **7a** — Bind the `skipstone` plugin to the `MVVMCSkipDemo` target. iOS xcodebuild goes red (intentionally) with one fail-fast error from Skip. ✅ Done in M10.
    - **7b** — Wrap all `*HostController.swift` + UIKit-only App-layer files in `#if !SKIP`. ✅ Done in M11. Discovered the frontier moves to a *View* (`case where`), not a VM as M5 predicted.
-   - **7c** — Fix Skip-transpile issues in the order Skip surfaces them, until the entire `MVVMCSkipDemo` module transpiles. Expected patterns to fix: `case … where` in Views, nested leading-dot enums in VMs, plus anything else surfaced by working through the gauntlet. iOS returns to green when the gauntlet completes.
+   - **7c** — Fix Skip-transpile issues in the order Skip surfaces them, until the entire `MVVMCSkipDemo` module transpiles. ✅ Done in M12. Four rebuilds, four fixes, in two files each of V/VM (UserDetail + PostList). The four other features needed no edits.
    - **7d** — Add an Android root view + wire to `Android/.../Main.kt`. Flip `SKIP_ACTION = launch`. Run `skip app launch --android` → first Android render. Screenshot.
 8. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
 

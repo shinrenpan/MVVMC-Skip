@@ -6,8 +6,15 @@ struct UserDetailView: View {
   var body: some View {
     Group {
       switch viewModel.state.api.fetchUser {
-      case .loading where viewModel.state.user == nil:
-        ProgressView()
+      case .loading:
+        // Equivalent to `case .loading where user == nil`: show ProgressView
+        // only when we have no cached user yet. Rewritten because Kotlin
+        // forbids case-pattern guards (`case … where …`).
+        if let user = viewModel.state.user {
+          UserInfoView(user: user)
+        } else {
+          ProgressView()
+        }
       case let .error(message):
         ContentUnavailableView(message, systemImage: "exclamationmark.triangle")
       default:

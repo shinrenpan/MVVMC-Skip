@@ -6,8 +6,20 @@ struct PostListView: View {
   var body: some View {
     Group {
       switch viewModel.state.api.fetchPosts {
-      case .loading where viewModel.state.posts.isEmpty:
-        ProgressView()
+      case .loading:
+        // Rewritten from `case .loading where posts.isEmpty` — Kotlin
+        // forbids case-pattern guards. See UserDetailView for the same fix.
+        if viewModel.state.posts.isEmpty {
+          ProgressView()
+        } else {
+          List(viewModel.state.posts) { post in
+            PostRow(post: post) {
+              Task { await viewModel.doAction(.view(.postDidTap(post))) }
+            } onUserTap: {
+              Task { await viewModel.doAction(.view(.userDidTap(post.userId))) }
+            }
+          }
+        }
       case let .error(message):
         ContentUnavailableView(message, systemImage: "exclamationmark.triangle")
       default:
@@ -59,7 +71,11 @@ private extension PostListView {
             .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        #if !SKIP
+        // .contentShape(Rectangle()) is not yet implemented in SkipUI.
+        // Drop it on Android — the row is still tappable via onTapGesture.
         .contentShape(Rectangle())
+        #endif
         .onTapGesture { onTap() }
 
         Button("User \(post.userId)") {
