@@ -31,4 +31,25 @@ private extension SettingsHostController {
     }
   }
 }
+#else
+import SwiftUI
+
+@MainActor
+struct SettingsHostController: View {
+  @State private var viewModel = SettingsViewModel()
+
+  var body: some View {
+    SettingsView(viewModel: viewModel)
+      .onAppear { bindRouter() }
+  }
+
+  private func bindRouter() {
+    viewModel.onRoute = { router in
+      switch router {
+      case .close:
+        AppRouter.shared.dismissSheet()
+      }
+    }
+  }
+}
 #endif

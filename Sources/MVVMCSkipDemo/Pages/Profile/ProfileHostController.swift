@@ -35,4 +35,27 @@ private extension ProfileHostController {
     }
   }
 }
+#else
+import SwiftUI
+
+@MainActor
+struct ProfileHostController: View {
+  @State private var viewModel = ProfileViewModel()
+
+  var body: some View {
+    ProfileView(viewModel: viewModel)
+      .onAppear { bindRouter() }
+  }
+
+  private func bindRouter() {
+    viewModel.onRoute = { router in
+      switch router {
+      case .toPosts:
+        AppRouter.shared.switchTab(.posts)
+      case .toSettings:
+        AppRouter.shared.presentSheet(.settings)
+      }
+    }
+  }
+}
 #endif

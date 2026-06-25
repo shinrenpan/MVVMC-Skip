@@ -40,7 +40,7 @@ public struct MVVMCSkipDemoRootView: View {
       .tag(AppTab.posts)
 
       NavigationStack(path: $appRouter.profilePath) {
-        ProfileLauncher()
+        ProfileHostController()
           .navigationDestination(for: AppRoute.self) { route in
             destinationView(for: route)
           }
@@ -65,16 +65,16 @@ public struct MVVMCSkipDemoRootView: View {
 
   @ViewBuilder
   private func sheetView(for route: SheetRoute) -> some View {
-    Text("Sheet not wired yet: \(String(describing: route))")
-      .foregroundStyle(.secondary)
-      .padding()
+    switch route {
+    case .settings:
+      NavigationStack { SettingsHostController() }
+    case .postFilter:
+      // PostFilterHostController wired in 9f.
+      Text("PostFilter sheet not wired yet")
+        .foregroundStyle(.secondary)
+        .padding()
+    }
   }
-}
-
-@MainActor
-struct ProfileLauncher: View {
-  @State private var viewModel = ProfileViewModel()
-  var body: some View { ProfileView(viewModel: viewModel) }
 }
 
 /// The Android `AppDelegate` analogue. Main.kt forwards lifecycle callbacks
