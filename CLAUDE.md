@@ -552,7 +552,7 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
    - **9c** — `UserDetailHostController #else` struct; wire `.userDetail` destination.
    - **9d** — `PostListHostController #else` struct; subscribe `onRoute` → push `.postDetail` / `.userDetail`, presentSheet `.postFilter`.
    - **9e** — `ProfileHostController #else` struct + `SettingsHostController #else`; wire Profile.toPosts → switchTab, Profile.toSettings → presentSheet(.settings), Settings.close → dismissSheet.
-   - **9f** — `PostFilterHostController #else`; wire PostFilter.dismiss → dismissSheet. Remove all `*Launcher` structs from `AppEntry.swift` once replaced.
+   - **9f** — `PostFilterHostController #else`; wire PostFilter.dismiss → dismissSheet. Remove all `*Launcher` structs from `AppEntry.swift` once replaced. ✅ Done (all Launchers removed).
 10. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
 
 Each step's `Why:` and any gotchas land back in the Migration Log above as they happen.

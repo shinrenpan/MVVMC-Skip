@@ -69,10 +69,7 @@ public struct MVVMCSkipDemoRootView: View {
     case .settings:
       NavigationStack { SettingsHostController() }
     case .postFilter:
-      // PostFilterHostController wired in 9f.
-      Text("PostFilter sheet not wired yet")
-        .foregroundStyle(.secondary)
-        .padding()
+      PostFilterHostController()
     }
   }
 }
