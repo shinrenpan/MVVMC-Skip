@@ -36,19 +36,33 @@ This repo only documents **Skip-specific deltas** on top of those rules.
 
 ## Skip adaptation rules
 
-> 🚧 **To be filled in during implementation.**
->
-> The Skip adaptation rules (which APIs need `#if !SKIP` guards, how `AppRouter` is mirrored on the Android side, how `SceneDelegate` deeplinks map to `.onOpenURL`, which Skip pattern rewrites are required, etc.) will be added here as the implementation progresses. Writing them speculatively before real transpiler feedback produces hollow rules that don't match reality.
->
-> Reference: the sibling repo [MVVMR-Skip](https://github.com/shinrenpan/MVVMR-Skip) (private) has already captured Skip transpiler gotchas during its own pure-SwiftUI migration. Its `CLAUDE.md` "Skip Compatibility Rules" section is a useful starting point, but the MVVMC-Skip strategy (preserve UIKit on iOS) will surface a different set of issues.
+Distilled from the actual transpile / compile / runtime gauntlets encountered during this migration. See Migration Log for full context.
 
----
+### Transpile gauntlet (Swift → Kotlin syntax)
+- **Idiom #3** — `case … where` → move guard into case body as `if`.
+- **Idiom #4** — Nested leading-dot enum at call site → lift into explicitly-typed `let result: Result<X, E> = .success(…)`.
+- **Idiom #5** — Nested case destructuring → outer match + inner `switch`.
+- **Idiom #6** — Qualify nested `ViewAction` at call site: `.view(.close)` → `.view(SettingsViewModel.ViewAction.close)` so Skip emits the correct Kotlin qualifier.
+- **Idiom #7** — Leading-dot `.init(id:)` → explicit `TypeName(id:)` to prevent Skip's silent fallback to `Any(…)`.
 
-## Sibling repos
+### Kotlin compile gauntlet (transpiled Kotlin vs. AndroidX / SkipUI)
+- **Idiom #8** — `#if !SKIP` / `#else` inline shim for absent SkipUI APIs (e.g. `ContentUnavailableView`). iOS keeps the rich API; Android gets a primitive fallback.
+- `var id: Self { self }` in `Identifiable` → write concrete type: `var id: AppRoute { self }`.
+- enum case parameter named `id` clashes with Kotlin's synthesised `Identifiable.id` → rename to `postId` / `userId`.
 
-- [`MVVMC`](https://github.com/shinrenpan/MVVMC) — iOS-only baseline (public)
-- [`MVVMR-Skip`](https://github.com/shinrenpan/MVVMR-Skip) — pure-SwiftUI cross-platform variant; Article C target (private)
-- `MVVMR` — pure-SwiftUI iOS-only evolution of MVVMC; Article B target (planned)
+### Runtime gauntlet (Compose recomposition)
+- **Idiom #9** — Android C-layer launcher: for each feature whose VM has reactive state, declare a small `@State`-owning struct (the `HostController #else` branch) to trigger Compose's `trackState()` installation. Without `@State` ownership, `Observed<Value>.projectedValue` stays `nil` and mutations never reach Compose.
+- **Idiom #10** — `.task { await … }` → `.onAppear { Task { await … } }` for views whose initial API call must survive `NavigationStack` push transitions. `.task` lifetime is bound to composition; `.onAppear + Task` is unstructured and survives the push.
+
+### `#if !SKIP` placement rules
+- Whole-file wrap (`#if !SKIP` … `#endif`): UIKit-specific files (`*HostController.swift`, `AppDelegate.swift`, `AppRouter.swift`, `SceneDelegate.swift`, `Deeplink.swift`).
+- Surgical inline wrap: iOS-only platform APIs inside otherwise cross-platform files (e.g. `UIApplication.shared.open`, `UNUserNotificationCenter` in `ProfileViewModel.swift`).
+- Never wrap ViewModel logic or `doAction` routing — architecture must stay identical on both platforms.
+
+### Android Router pattern
+- `AppRouter #else` singleton: `@MainActor @Observable final class AppRouter` with `tab`, `postsPath`, `profilePath`, `sheetRoute`, `postFilterViewModel`.
+- Each `HostController #else` struct: owns VM via `@State`, binds router in `.onAppear { bindRouter() }`.
+- Strong capture (not `[weak]`) inside `onCallback` / `onRoute` closures — Kotlin uses GC, `[weak]` loses the reference silently.
 
 ---
 
@@ -523,6 +537,20 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `xcodebuild … build` → `** BUILD SUCCEEDED **`. iOS unchanged.
   - `skip app launch --android --plain` → `Launch Skip app succeeded`. Android app opens with `Posts` / `Profile` tab bar; tapping each tab shows the `PostsLauncher` / `ProfileLauncher` content as before (step 9b–e will wire the full navigation graph).
 
+### M21 — Step 9 bugfix: PostFilter callback `[weak viewModel]` (commit `f7973c2`)
+- **What**: In `PostListHostController.swift`'s `#else` branch, removed `[weak viewModel]` capture from the `filterVM.onCallback` closure. Changed `viewModel?.doAction(…)` → `viewModel.doAction(…)`.
+- **Why**: After Step 9f shipped, manual testing of the PostFilter flow revealed that selecting a user from the filter sheet closed the sheet correctly (`dismissSheet()` worked — `AppRouter` is a class, a strong reference) but the post list never updated. Adding `print()` statements confirmed `onCallback` was firing but the `viewModel?.doAction(…)` call was silently no-oping — `viewModel` was `nil` inside the closure despite the owning `PostListHostController` still being on screen.
+
+  Root cause: Kotlin uses garbage collection, not ARC. Swift's `[weak viewModel]` becomes a `WeakReference<PostListViewModel>` wrapper in Kotlin. When Skip transpiles the outer `onRoute` closure containing an inner `onCallback` closure, the weak wrapper loses the reference during the cross-closure capture chain — there's no ARC retain keeping `viewModel` alive from inside the nested closure. The object is still reachable from the `PostListHostController` struct's `@State`, but the Kotlin `WeakReference` has already been cleared by the time `onCallback` fires.
+
+  On iOS, `[weak viewModel]` is necessary to break the cycle: `PostListHostController` → `viewModel.onRoute` → closure → `[weak self]` → self. On Android, there's no retain cycle risk (GC handles cycles), so `[weak]` is actively harmful.
+
+- **Rule**: In `#else` SwiftUI struct branches, always use **strong capture** in `onRoute`/`onCallback` closures. Kotlin's GC makes `[weak]` unnecessary and dangerous for cross-closure VM references.
+- **Verification**:
+  - `skip app launch --android --plain` → `Launch Skip app succeeded`.
+  - Manual end-to-end test: Posts tab → Filter → select User 1 → sheet dismisses → list filters to User 1's posts ✅. Filter → Show All → list resets ✅. Filter → Cancel → no change ✅.
+  - iOS unchanged (the `#if !SKIP` branch retains its `[weak self]` guard as before).
+
 ---
 
 ## Next Steps (start here in the next session)
@@ -546,13 +574,14 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
    - **8c** — Profile. ✅ Done in M17. iOS-only APIs (`UIApplication.shared.open`, `UNUserNotificationCenter`) handled with surgical `#if !SKIP` shims; Android buttons no-op for those demos but the View / VM / Models cross-compile.
    - **8d** — UserDetail. ✅ Done in M18. API works on Android via idiom #10 (`.onAppear + Task` instead of `.task` to survive NavigationStack transition cancellation); `ContentUnavailableView` handled with idiom #8.
    - **8e** — PostDetail. ✅ Done in M19. Simplest port (no Router actions, no API, no async state). Step 8 complete.
-9. **Android Router wiring** — per-feature `<Feature>HostController.swift` grows an `#else` SwiftUI struct that owns the VM (`@State`) and subscribes to `viewModel.onRoute` to call `AppRouter.shared`. Launchers in `AppEntry.swift` are replaced by these structs. Sub-steps:
+9. ~~**Android Router wiring**~~ ✅ Complete (M20–M21). Per-feature `<Feature>HostController.swift` grows an `#else` SwiftUI struct that owns the VM (`@State`) and subscribes to `viewModel.onRoute` to call `AppRouter.shared`. All Launchers replaced.
    - **9a** — `AppRoute` enum + `AppRouter #else` singleton + TabView root. ✅ Done in M20.
-   - **9b** — `PostDetailHostController #else` struct; wire `.postDetail` destination in root.
-   - **9c** — `UserDetailHostController #else` struct; wire `.userDetail` destination.
-   - **9d** — `PostListHostController #else` struct; subscribe `onRoute` → push `.postDetail` / `.userDetail`, presentSheet `.postFilter`.
-   - **9e** — `ProfileHostController #else` struct + `SettingsHostController #else`; wire Profile.toPosts → switchTab, Profile.toSettings → presentSheet(.settings), Settings.close → dismissSheet.
-   - **9f** — `PostFilterHostController #else`; wire PostFilter.dismiss → dismissSheet. Remove all `*Launcher` structs from `AppEntry.swift` once replaced. ✅ Done (all Launchers removed).
-10. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
+   - **9b** — `PostDetailHostController #else` struct; wire `.postDetail` destination in root. ✅ Done (commit `ece0556`).
+   - **9c** — `UserDetailHostController #else` struct; wire `.userDetail` destination. ✅ Done (commit `cbbdd2a`).
+   - **9d** — `PostListHostController #else` struct; subscribe `onRoute` → push `.postDetail` / `.userDetail`, presentSheet `.postFilter`. ✅ Done (commit `612a93a`).
+   - **9e** — `ProfileHostController #else` struct + `SettingsHostController #else`; wire Profile.toPosts → switchTab, Profile.toSettings → presentSheet(.settings), Settings.close → dismissSheet. ✅ Done (commit `0d0675e`).
+   - **9f** — `PostFilterHostController #else`; wire PostFilter.dismiss → dismissSheet. Remove all `*Launcher` structs from `AppEntry.swift`. ✅ Done (commit `b574a78`).
 
-Each step's `Why:` and any gotchas land back in the Migration Log above as they happen.
+---
+
+**All steps complete as of 2026-06-26.** The MVVMC iOS architecture runs on Android via Skip with iOS behaviour identical to baseline. See M21 for the final bugfix.

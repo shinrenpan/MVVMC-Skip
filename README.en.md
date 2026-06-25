@@ -8,15 +8,15 @@ MVVMC-Skip doesn't rewrite the architecture or rework navigation — it uses `#i
 
 ---
 
-## Relationship to the MVVMC family
+## Relationship to MVVMC
 
-|              | MVVMC                         | MVVMC-Skip (this repo)             | [MVVMR-Skip](https://github.com/shinrenpan/MVVMR-Skip) |
-|---           |---                            |---                                 |---                                  |
-| C layer      | UIKit `HostController`        | UIKit `HostController` (preserved) | SwiftUI Router                      |
-| Cross-platform approach | (iOS only)         | `#if SKIP`, two navigation impls   | Single SwiftUI codebase             |
-| iOS behaviour | baseline                     | **identical to baseline**          | may diverge                         |
-| Target audience | new iOS-only project       | **existing MVVMC project adding Android** | new cross-platform project   |
-| Article      | (baseline reference)          | **Article A**                      | Article C                           |
+|              | MVVMC                         | MVVMC-Skip (this repo)             |
+|---           |---                            |---                                 |
+| C layer      | UIKit `HostController`        | UIKit `HostController` (preserved) |
+| Cross-platform approach | (iOS only)         | `#if SKIP`, two navigation impls   |
+| iOS behaviour | baseline                     | **identical to baseline**          |
+| Target audience | new iOS-only project       | **existing MVVMC project adding Android** |
+| Article      | (baseline reference)          | **Article A**                      |
 
 > MVVMC-Skip's core promise: existing iOS architecture is not disturbed. If your project is already MVVMC, adding Android support requires no refactor — only `#else` branches.
 
@@ -46,19 +46,15 @@ MVVMC-Skip doesn't rewrite the architecture or rework navigation — it uses `#i
 
 ## Repo status
 
-🚧 **Currently private**, to be made public after **Article A** ships.
+✅ **Implementation complete** (2026-06-26). All 10 steps (Steps 1–9 + bugfix M21) are committed.
 
-Concrete Skip adaptation rules (which APIs need guards, how to substitute `UINavigationController` on the Android side, etc.) will be added to this repo's `CLAUDE.md` as the implementation progresses — **not invented up front**.
+Detailed Skip adaptation rules and the rationale behind each decision are recorded in `CLAUDE.md`'s Migration Log (M0–M21).
 
 ---
 
-## Article series
+## Article
 
-This repo backs the **first** article in a planned three-part series:
-
-- [ ] **Article A** — MVVMC + Skip: bring the existing UIKit-nav architecture to Android via `#if SKIP` (**this repo**)
-- [ ] **Article B** — MVVMC → MVVMR: why the C layer moves from UIKit HostController to a SwiftUI Router (repo: `MVVMR`, planned)
-- [ ] **Article C** — MVVMR + Skip: a single SwiftUI codebase for iOS + Android (repo: [`MVVMR-Skip`](https://github.com/shinrenpan/MVVMR-Skip), private)
+This repo backs **Article A**: MVVMC + Skip — bringing the existing UIKit-nav architecture to Android via `#if SKIP`.
 
 ---
 

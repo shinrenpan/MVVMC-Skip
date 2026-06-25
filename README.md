@@ -8,15 +8,15 @@ MVVMC-Skip 不重寫架構、不重做導航,只用 `#if SKIP` / `#if !SKIP` 條
 
 ---
 
-## 與 MVVMC 系列的關係
+## 與 MVVMC 的關係
 
-|              | MVVMC                         | MVVMC-Skip（本 repo）              | [MVVMR-Skip](https://github.com/shinrenpan/MVVMR-Skip) |
-|---           |---                            |---                                 |---                                  |
-| C 層         | UIKit `HostController`        | UIKit `HostController`（保留）     | 改為 SwiftUI Router                 |
-| 跨平台手法   | (不跨平台)                    | `#if SKIP` 條件編譯,兩套導航實作   | 單一 SwiftUI codebase               |
-| iOS 行為     | 基準                          | **與基準完全一致**                 | 不一定等同基準                      |
-| 適用對象     | iOS-only 新專案               | **既有 MVVMC 專案要加 Android**    | 全新跨平台專案                      |
-| 對應文章     | (基準參考)                    | **文章 A**                         | 文章 C                              |
+|              | MVVMC                         | MVVMC-Skip（本 repo）              |
+|---           |---                            |---                                 |
+| C 層         | UIKit `HostController`        | UIKit `HostController`（保留）     |
+| 跨平台手法   | (不跨平台)                    | `#if SKIP` 條件編譯,兩套導航實作   |
+| iOS 行為     | 基準                          | **與基準完全一致**                 |
+| 適用對象     | iOS-only 新專案               | **既有 MVVMC 專案要加 Android**    |
+| 對應文章     | (基準參考)                    | **文章 A**                         |
 
 > MVVMC-Skip 的核心訴求是「不破壞既有 iOS 架構」。如果你的專案已經是 MVVMC,加 Android 支援時無需重構,只要補 `#else` 分支。
 
@@ -46,19 +46,15 @@ MVVMC-Skip 不重寫架構、不重做導航,只用 `#if SKIP` / `#if !SKIP` 條
 
 ## Repo 狀態
 
-🚧 **目前 private**,待**文章 A** 完成後公開。
+✅ **實作完成**（2026-06-26）。所有 10 個步驟（Steps 1–9 + bugfix M21）皆已 commit。
 
-具體的 Skip 適配規則(哪些 API 要 guard、Android 側如何替代 `UINavigationController` 等)會在實作過程逐步寫入本 repo 的 `CLAUDE.md`,**不在動工前憑空寫**。
+詳細的 Skip 適配規則與每個決策的 Why 記錄在 `CLAUDE.md` 的 Migration Log（M0–M21）。
 
 ---
 
-## 技術文章系列
+## 技術文章
 
-本 repo 對應系列文的**第一篇**。完整三篇規劃：
-
-- [ ] **文章 A** — MVVMC + Skip:用 `#if SKIP` 把現有 UIKit-nav 架構帶到 Android（**本 repo**）
-- [ ] **文章 B** — MVVMC → MVVMR:為什麼把 C 層從 UIKit HostController 改成 SwiftUI Router（對應 repo: `MVVMR`,規劃中）
-- [ ] **文章 C** — MVVMR + Skip:純 SwiftUI 單一架構跨平台（對應 repo: [`MVVMR-Skip`](https://github.com/shinrenpan/MVVMR-Skip),private）
+本 repo 對應**文章 A**：MVVMC + Skip — 用 `#if SKIP` 把現有 UIKit-nav 架構帶到 Android。
 
 ---
 
