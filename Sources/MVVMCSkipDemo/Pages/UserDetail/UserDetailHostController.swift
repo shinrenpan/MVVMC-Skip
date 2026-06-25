@@ -14,4 +14,19 @@ final class UserDetailHostController: UIHostingController<UserDetailView> {
   @available(*, unavailable)
   required init?(coder: NSCoder) { fatalError() }
 }
+#else
+import SwiftUI
+
+@MainActor
+struct UserDetailHostController: View {
+  @State private var viewModel: UserDetailViewModel
+
+  init(userId: Int) {
+    self._viewModel = State(initialValue: UserDetailViewModel(userId: userId))
+  }
+
+  var body: some View {
+    UserDetailView(viewModel: viewModel)
+  }
+}
 #endif

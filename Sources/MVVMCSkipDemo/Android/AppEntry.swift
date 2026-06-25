@@ -58,11 +58,8 @@ public struct MVVMCSkipDemoRootView: View {
     switch route {
     case let .postDetail(postId, title, body):
       PostDetailHostController(id: postId, title: title, body: body)
-    default:
-      // Remaining routes wired in 9c–e.
-      Text("Not wired yet: \(String(describing: route))")
-        .foregroundStyle(.secondary)
-        .padding()
+    case let .userDetail(userId):
+      UserDetailHostController(userId: userId)
     }
   }
 
@@ -91,15 +88,6 @@ struct PostsLauncher: View {
 struct ProfileLauncher: View {
   @State private var viewModel = ProfileViewModel()
   var body: some View { ProfileView(viewModel: viewModel) }
-}
-
-@MainActor
-struct UserDetailLauncher: View {
-  @State private var viewModel: UserDetailViewModel
-  init(userId: Int) {
-    self._viewModel = State(initialValue: UserDetailViewModel(userId: userId))
-  }
-  var body: some View { UserDetailView(viewModel: viewModel) }
 }
 
 /// The Android `AppDelegate` analogue. Main.kt forwards lifecycle callbacks
