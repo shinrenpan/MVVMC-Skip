@@ -231,4 +231,81 @@ private extension AppTransitionAnimator {
     }
   }
 }
+
+#else
+
+// MARK: - AppRouter (Android equivalent)
+//
+// Mirrors the iOS UIKit AppRouter as a SwiftUI navigation-state singleton.
+// Owns the per-tab NavigationStack path arrays and the sheet/dismiss state
+// driven by `viewModel.onRoute` translations inside each feature's
+// `<Feature>HostController.swift` `#else` branch. Same call sites
+// (`AppRouter.shared.push(...)`, `.popToCurrentRoot()`, `.switchTab(...)`,
+// `.presentSheet(...)`, `.dismissSheet()`) read uniformly on both platforms.
+
+import Observation
+import SwiftUI
+
+@MainActor
+@Observable
+final class AppRouter {
+  static let shared = AppRouter()
+  private init() {}
+
+  // Current tab.
+  var tab: AppTab = .posts
+
+  // Per-tab path stacks — bound to `NavigationStack(path:)` in the root view.
+  var postsPath: [AppRoute] = []
+  var profilePath: [AppRoute] = []
+
+  // Single shared "modal sheet" slot. Feature hosts that want a sheet
+  // (Settings from Profile, PostFilter from PostList) write into here;
+  // the root view binds it via `.sheet(item:)`.
+  var sheetRoute: SheetRoute?
+
+  // MARK: - Path operations
+
+  func push(_ route: AppRoute) {
+    switch tab {
+    case .posts:   postsPath.append(route)
+    case .profile: profilePath.append(route)
+    }
+  }
+
+  func popToCurrentRoot() {
+    switch tab {
+    case .posts:   postsPath.removeAll()
+    case .profile: profilePath.removeAll()
+    }
+  }
+
+  func switchTab(_ tab: AppTab) {
+    self.tab = tab
+  }
+
+  // MARK: - Sheet operations
+
+  func presentSheet(_ route: SheetRoute) {
+    sheetRoute = route
+  }
+
+  func dismissSheet() {
+    sheetRoute = nil
+  }
+}
+
+// MARK: - SheetRoute
+
+/// Routes that appear as a modal sheet rather than a NavigationStack push.
+/// Kept separate from `AppRoute` because `.sheet(item:)` and
+/// `NavigationStack(path:)` consume different state slots, and lumping them
+/// into one enum would require both binding sites to filter.
+enum SheetRoute: Hashable, Sendable, Identifiable {
+  case settings
+  case postFilter
+
+  var id: SheetRoute { self }
+}
+
 #endif

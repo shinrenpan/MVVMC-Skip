@@ -13,43 +13,61 @@
 #if SKIP
 import SwiftUI
 
-/// The Android root view. Starts as a flat index that lists each
-/// successfully-ported feature; each Step 8 commit appends one
-/// `NavigationLink` row. When the full MVVMC tab-bar surface is ported, the
-/// root can switch to a `TabView` mirroring iOS's `Posts` / `Profile` tabs.
+/// The Android root view. Mirrors iOS's `UITabBarController` structure:
+/// `Posts` and `Profile` tabs, each with its own `NavigationStack` whose
+/// path is bound to `AppRouter.shared` so feature-level `viewModel.onRoute`
+/// callbacks can drive cross-feature navigation through a single
+/// state-of-truth.
+///
+/// Per-tab navigation destinations (`PostDetail`, `UserDetail`, etc.) and
+/// the shared sheet slot (`Settings`, `PostFilter`) are added in Step 9b–e
+/// as each feature's `<Feature>HostController.swift` grows its `#else`
+/// SwiftUI struct.
 public struct MVVMCSkipDemoRootView: View {
+  @Bindable private var appRouter = AppRouter.shared
+
   public init() {}
 
   public var body: some View {
-    NavigationStack {
-      List {
-        Section("Ported features") {
-          NavigationLink("Settings") {
-            SettingsView(viewModel: SettingsViewModel())
+    TabView(selection: $appRouter.tab) {
+      NavigationStack(path: $appRouter.postsPath) {
+        PostsLauncher()
+          .navigationDestination(for: AppRoute.self) { route in
+            destinationView(for: route)
           }
-          NavigationLink("Filter by User") {
-            PostFilterView(viewModel: PostFilterViewModel())
-          }
-          NavigationLink("Posts") {
-            PostsLauncher()
-          }
-          NavigationLink("Profile") {
-            ProfileLauncher()
-          }
-          NavigationLink("User 1 Detail") {
-            UserDetailLauncher(userId: 1)
-          }
-          NavigationLink("Post 1 Detail") {
-            PostDetailLauncher(
-              id: 1,
-              title: "Understanding MVVMC",
-              body: "MVVMC separates concerns across four strictly defined layers: Model, ViewModel, View, and Controller."
-            )
-          }
-        }
       }
-      .navigationTitle("MVVMC × Skip")
+      .tabItem { Label("Posts", systemImage: "list.bullet") }
+      .tag(AppTab.posts)
+
+      NavigationStack(path: $appRouter.profilePath) {
+        ProfileLauncher()
+          .navigationDestination(for: AppRoute.self) { route in
+            destinationView(for: route)
+          }
+      }
+      .tabItem { Label("Profile", systemImage: "person") }
+      .tag(AppTab.profile)
     }
+    .sheet(item: $appRouter.sheetRoute) { route in
+      sheetView(for: route)
+    }
+  }
+
+  // Step 9b–e fill these in feature by feature. Until then, an unmapped
+  // route or sheet renders a visible placeholder so navigation accidents
+  // surface loudly during development.
+  @ViewBuilder
+  private func destinationView(for route: AppRoute) -> some View {
+    Text("Not wired yet: \(String(describing: route))")
+      .foregroundStyle(.secondary)
+      .padding()
+  }
+
+  @ViewBuilder
+  private func sheetView(for route: SheetRoute) -> some View {
+    Text("Sheet not wired yet: \(String(describing: route))")
+      .foregroundStyle(.secondary)
+      .padding()
   }
 }
 

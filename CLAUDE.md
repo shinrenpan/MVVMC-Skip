@@ -510,6 +510,19 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `skip app launch --android --plain` → `Launch Skip app succeeded in 11.79s`. Pixel 9 renders the full Post body content (`articles/images/step8e-android-postdetail.png`): nav title `Post 1`, bold title `Understanding MVVMC`, body text in muted style.
   - `skip app launch --ios --plain` → `Launch Skip app succeeded in 10.73s`. iOS unchanged.
 
+### M20 — Step 9a: Android Router foundation — `AppRoute` + `AppRouter #else` + TabView root (this commit)
+- **What**:
+  - Added `Sources/MVVMCSkipDemo/App/AppRoute.swift` (no `#if`, cross-platform): `AppTab` enum (`posts` / `profile`), `AppRoute` enum (`postDetail(postId:title:body:)` / `userDetail(userId:)`), `AppRoute: Identifiable` extension (`var id: AppRoute { self }`).
+  - Extended `Sources/MVVMCSkipDemo/App/AppRouter.swift` with an `#else` branch: `@MainActor @Observable final class AppRouter` singleton with `tab: AppTab`, `postsPath: [AppRoute]`, `profilePath: [AppRoute]`, `sheetRoute: SheetRoute?`, and methods `push(_:)`, `popToCurrentRoot()`, `switchTab(_:)`, `presentSheet(_:)`, `dismissSheet()`. Also declares `SheetRoute` enum (`settings` / `postFilter`) in this branch.
+  - Rewrote `MVVMCSkipDemoRootView` in `Sources/MVVMCSkipDemo/Android/AppEntry.swift`: from a flat feature-index `List` to a `TabView(selection: $appRouter.tab)` with two `NavigationStack(path:)` tabs (Posts / Profile) and a `.sheet(item: $appRouter.sheetRoute)`. Navigation destinations and sheet contents are placeholder `Text(…)` stubs — filled in per-feature in 9b–e.
+- **Why**: Step 8 gave Android a flat index of isolated feature screens. Step 9 connects them into the same navigable graph the iOS UIKit app has. The foundation is a shared navigation-state singleton (`AppRouter.shared`) and per-tab `NavigationStack(path:)` stacks that feature `HostController #else` branches will push/pop/sheet in 9b–e. This mirrors what `AppRouter` does on iOS — manage transitions — but expressed in SwiftUI state rather than UIKit imperative calls.
+- **Two idioms surfaced during `AppRoute` / `SheetRoute` definition**:
+  - `var id: Self { self }` in an `Identifiable` conformance → Skip's transpiler can't resolve `Self` at that position → write the concrete type: `var id: AppRoute { self }`.
+  - enum case parameter named `id` (e.g. `case postDetail(id: Int)`) clashes with the `id` property that `Identifiable` synthesises in Kotlin → rename case parameters to `postId` / `userId`.
+- **Verification**:
+  - `xcodebuild … build` → `** BUILD SUCCEEDED **`. iOS unchanged.
+  - `skip app launch --android --plain` → `Launch Skip app succeeded`. Android app opens with `Posts` / `Profile` tab bar; tapping each tab shows the `PostsLauncher` / `ProfileLauncher` content as before (step 9b–e will wire the full navigation graph).
+
 ---
 
 ## Next Steps (start here in the next session)
@@ -533,8 +546,13 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
    - **8c** — Profile. ✅ Done in M17. iOS-only APIs (`UIApplication.shared.open`, `UNUserNotificationCenter`) handled with surgical `#if !SKIP` shims; Android buttons no-op for those demos but the View / VM / Models cross-compile.
    - **8d** — UserDetail. ✅ Done in M18. API works on Android via idiom #10 (`.onAppear + Task` instead of `.task` to survive NavigationStack transition cancellation); `ContentUnavailableView` handled with idiom #8.
    - **8e** — PostDetail. ✅ Done in M19. Simplest port (no Router actions, no API, no async state). Step 8 complete.
-9. **Android Router wiring** — connect each feature's `onRoute` callback to the Android `NavigationStack` so that PostList → PostDetail / UserDetail / PostFilter / Profile, Profile → PostList / Settings, etc. all work on Android. Design decision pending (see deferred-decisions section).
-10. **Root TabView replacement** — once Router is wired, change `MVVMCSkipDemoRootView` from a flat feature-index `List` into a `TabView` mirroring iOS's `Posts` / `Profile` tab bar.
-8. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
+9. **Android Router wiring** — per-feature `<Feature>HostController.swift` grows an `#else` SwiftUI struct that owns the VM (`@State`) and subscribes to `viewModel.onRoute` to call `AppRouter.shared`. Launchers in `AppEntry.swift` are replaced by these structs. Sub-steps:
+   - **9a** — `AppRoute` enum + `AppRouter #else` singleton + TabView root. ✅ Done in M20.
+   - **9b** — `PostDetailHostController #else` struct; wire `.postDetail` destination in root.
+   - **9c** — `UserDetailHostController #else` struct; wire `.userDetail` destination.
+   - **9d** — `PostListHostController #else` struct; subscribe `onRoute` → push `.postDetail` / `.userDetail`, presentSheet `.postFilter`.
+   - **9e** — `ProfileHostController #else` struct + `SettingsHostController #else`; wire Profile.toPosts → switchTab, Profile.toSettings → presentSheet(.settings), Settings.close → dismissSheet.
+   - **9f** — `PostFilterHostController #else`; wire PostFilter.dismiss → dismissSheet. Remove all `*Launcher` structs from `AppEntry.swift` once replaced.
+10. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
 
 Each step's `Why:` and any gotchas land back in the Migration Log above as they happen.
