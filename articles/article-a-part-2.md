@@ -404,30 +404,11 @@ PostList tab + Tab Bar 維持 M8 之後完全不變的 UIKit 行為。
 
 ---
 
-## 八、下一篇 teaser
+## 八、下一篇預告
 
-Step 8 是 per-feature Android port——每個 feature 一個 commit：
-
-1. **PostFilter** ─ 最單純，沒 API 沒 deeplink，跟 Settings 同等級
-2. **PostList** ─ 有 API call，要修 `ContentUnavailableView` 替代 + 多處 `.view(...)` qualifier
-3. **Profile** ─ 有 `UIApplication.shared.open` 跟 `UNUserNotificationCenter`，需要 Android 端 deeplink 替代設計
-4. **UserDetail** ─ API + `ContentUnavailableView`
-5. **PostDetail** ─ 最後
-
-每個 feature ship 完，Android root view 從 `NavigationStack { SettingsView }` 慢慢長成完整的 tab bar app。
-
-當所有 feature port 完，文章的下一個對照可以變成：
-- **Article B**：MVVMR（純 SwiftUI 改寫 MVVMC）— iOS-only。先把 UIKit 拆掉，再考慮跨平台。
-- **Article C**：MVVMR-Skip（純 SwiftUI 跨平台）— 從一開始就 SwiftUI、不留 UIKit。
-
-跟 Article A（MVVMC-Skip，**iOS UIKit 留著**）放在一起，可以看清楚 **「保留既有架構」vs「重寫一份」** 在跨平台成本上的差別。
+Step 8（逐功能 Android port）和 Step 9（Router 接線）在 Part 3 展開。Runtime gauntlet 的根因、`.task` 取消問題、HostController 雙實作模式，都在那裡。
 
 ---
 
-> 本文涵蓋的 commit：[`7558842`](../../../commit/7558842)（M8）、[`1ba78fa`](../../../commit/1ba78fa) + [`6e6dcb1`](../../../commit/6e6dcb1)（M9）、[`fa063a9`](../../../commit/fa063a9)（M10）、[`71b9284`](../../../commit/71b9284)（M11）、[`fdaaac1`](../../../commit/fdaaac1)（M12）、M13 commit pending。
-> 完整決策軌跡 + verification 在 [`../CLAUDE.md`](../CLAUDE.md) 的 Migration Log M8–M13。
-
----
-
-> 本文涵蓋的 commit：[`7558842`](../../../commit/7558842)（M8）、[`1ba78fa`](../../../commit/1ba78fa) + [`6e6dcb1`](../../../commit/6e6dcb1)（M9）、[`fa063a9`](../../../commit/fa063a9)（M10）、[`71b9284`](../../../commit/71b9284)（M11）、[`fdaaac1`](../../../commit/fdaaac1)（M12）、待補（M13）。
+> 本文涵蓋的 commit：[`7558842`](../../../commit/7558842)（M8）、[`1ba78fa`](../../../commit/1ba78fa) + [`6e6dcb1`](../../../commit/6e6dcb1)（M9）、[`fa063a9`](../../../commit/fa063a9)（M10）、[`71b9284`](../../../commit/71b9284)（M11）、[`fdaaac1`](../../../commit/fdaaac1)（M12）、[`e4e934a`](../../../commit/e4e934a)（M13）
 > 完整決策軌跡 + verification 在 [`../CLAUDE.md`](../CLAUDE.md) 的 Migration Log M8–M13。
