@@ -31,7 +31,7 @@ public struct MVVMCSkipDemoRootView: View {
   public var body: some View {
     TabView(selection: $appRouter.tab) {
       NavigationStack(path: $appRouter.postsPath) {
-        PostsLauncher()
+        PostListHostController()
           .navigationDestination(for: AppRoute.self) { route in
             destinationView(for: route)
           }
@@ -69,19 +69,6 @@ public struct MVVMCSkipDemoRootView: View {
       .foregroundStyle(.secondary)
       .padding()
   }
-}
-
-/// Android-side wrapper that owns its `PostListViewModel` through `@State`,
-/// which is what registers it into Compose's snapshot-tracking system. Pure
-/// `let viewModel:` on the inside `PostListView` would never recompose on
-/// Android — `@Observable` on iOS works through the `let` ref because Swift
-/// macros set up subscription on every property access; SkipUI's `Observed`
-/// only activates `trackState()` when the VM is held by `@State` (or
-/// `.environment(_:)`).
-@MainActor
-struct PostsLauncher: View {
-  @State private var viewModel = PostListViewModel()
-  var body: some View { PostListView(viewModel: viewModel) }
 }
 
 @MainActor

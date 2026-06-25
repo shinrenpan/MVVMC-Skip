@@ -264,6 +264,11 @@ final class AppRouter {
   // the root view binds it via `.sheet(item:)`.
   var sheetRoute: SheetRoute?
 
+  // PostFilter's VM is created by PostListHostController before presenting
+  // the sheet, so PostFilterHostController can read it here and attach the
+  // callback that routes results back to PostList.
+  var postFilterViewModel: PostFilterViewModel?
+
   // MARK: - Path operations
 
   func push(_ route: AppRoute) {

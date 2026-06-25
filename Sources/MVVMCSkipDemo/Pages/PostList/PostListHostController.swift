@@ -54,4 +54,50 @@ private extension PostListHostController {
     }
   }
 }
+#else
+import SwiftUI
+
+// Android C-layer for PostList. Mirrors the iOS HostController pattern:
+// owns the VM, subscribes onRoute, and drives AppRouter.shared for navigation.
+@MainActor
+struct PostListHostController: View {
+  @State private var viewModel = PostListViewModel()
+
+  var body: some View {
+    PostListView(viewModel: viewModel)
+      .onAppear { bindRouter() }
+  }
+
+  private func bindRouter() {
+    viewModel.onRoute = { router in
+      switch router {
+      case let .toDetail(post):
+        AppRouter.shared.push(.postDetail(postId: post.id, title: post.title, body: post.body))
+
+      case let .toUserDetail(userId):
+        AppRouter.shared.push(.userDetail(userId: userId))
+
+      case .toProfile:
+        AppRouter.shared.switchTab(.profile)
+
+      case .toFilter:
+        let filterVM = PostFilterViewModel()
+        filterVM.onCallback = { [weak viewModel] callback in
+          switch callback {
+          case let .didSelectUser(user):
+            AppRouter.shared.dismissSheet()
+            await viewModel?.doAction(.view(PostListViewModel.ViewAction.didFilterUser(user.id)))
+          case .showAll:
+            AppRouter.shared.dismissSheet()
+            await viewModel?.doAction(.view(PostListViewModel.ViewAction.clearFilter))
+          case .didCancel:
+            AppRouter.shared.dismissSheet()
+          }
+        }
+        AppRouter.shared.postFilterViewModel = filterVM
+        AppRouter.shared.presentSheet(.postFilter)
+      }
+    }
+  }
+}
 #endif
