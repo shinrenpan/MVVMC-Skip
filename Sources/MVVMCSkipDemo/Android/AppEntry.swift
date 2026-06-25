@@ -39,6 +39,13 @@ public struct MVVMCSkipDemoRootView: View {
           NavigationLink("User 1 Detail") {
             UserDetailLauncher(userId: 1)
           }
+          NavigationLink("Post 1 Detail") {
+            PostDetailLauncher(
+              id: 1,
+              title: "Understanding MVVMC",
+              body: "MVVMC separates concerns across four strictly defined layers: Model, ViewModel, View, and Controller."
+            )
+          }
         }
       }
       .navigationTitle("MVVMC × Skip")
@@ -72,6 +79,16 @@ struct UserDetailLauncher: View {
     self._viewModel = State(initialValue: UserDetailViewModel(userId: userId))
   }
   var body: some View { UserDetailView(viewModel: viewModel) }
+}
+
+@MainActor
+struct PostDetailLauncher: View {
+  @State private var viewModel: PostDetailViewModel
+  init(id: Int, title: String, body: String) {
+    let post = PostDetailViewModel.Post(id: id, title: title, body: body)
+    self._viewModel = State(initialValue: PostDetailViewModel(post: post))
+  }
+  var body: some View { PostDetailView(viewModel: viewModel) }
 }
 
 /// The Android `AppDelegate` analogue. Main.kt forwards lifecycle callbacks

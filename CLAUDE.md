@@ -465,7 +465,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `skip app launch --ios --plain` → `Launch Skip app succeeded in 10.82s`. iOS Profile remains UIKit-driven; deeplinks / notifications work as before.
   - ProfileView is cross-platform with idiom #6 qualifications; ProfileViewModel is cross-platform with surgical `#if !SKIP` shims around iOS-only sites. The `Action` / `Router` / `State` enums and the VM class shape are unchanged.
 
-### M18 — Step 8d: UserDetail ports + `.task` cancellation gotcha (this commit)
+### M18 — Step 8d: UserDetail ports + `.task` cancellation gotcha (commit `c90c793`)
 - **What**:
   - Unwrapped `UserDetailView.swift` from M13 `#if !SKIP`.
   - Applied idiom #6 to the single `.task { … doAction(.view(.isFirstAppear)) }` call site → `.view(UserDetailViewModel.ViewAction.isFirstAppear)`.
@@ -499,6 +499,17 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `skip app launch --android --plain` → `Launch Skip app succeeded in 7.92s`. Tapping `User 1 Detail` from the root index now renders `Alice Chen` / `alice@example.com` / `MVVMC Corp` correctly, with the navigation title dynamically set to `"Alice Chen"` once the API resolves. Screenshot at `articles/images/step8d-android-userdetail.png`.
   - `skip app launch --ios --plain` → `Launch Skip app succeeded in 10.38s`. iOS UserDetail unchanged from baseline.
 
+### M19 — Step 8e: PostDetail ports (this commit)
+- **What**:
+  - Unwrapped `PostDetailView.swift` from M13 `#if !SKIP`. No idiom application needed — the View has zero `doAction` sites, no `.task`, no `ContentUnavailableView`. Pure state-rendering: `ScrollView { VStack { Text(state.post.title); Divider(); Text(state.post.body) } }`.
+  - Added `PostDetailLauncher(id:title:body:)` to `Sources/MVVMCSkipDemo/Android/AppEntry.swift`. Constructor signature matches the iOS-side `PostDetailHostController` (`init(id: Int, title: String, body: String)`) so the eventual Router-driven instantiation in Step 9 can use one calling convention across platforms.
+  - Added `NavigationLink("Post 1 Detail")` to the root index, with hardcoded demo content for now.
+- **Why so light**: PostDetail is "pure render" — its state is set at init and never mutates. No reactive state means no `@Observable` recompose required for the demo to look right, no API call means no Task cancellation risk, no Router action site means no idiom #6 qualifiers needed. This is the simplest possible Skip port: remove `#if !SKIP`, add Launcher.
+- **What this completes**: Step 8 in its entirety. Six MVVMC features (Settings, PostFilter, PostList, Profile, UserDetail, PostDetail) all render on Android from the same Swift source as iOS, with the MVVMC architecture (M / VM / V / C) untouched on the iOS side and a per-platform C-layer (HostController on iOS, Launcher on Android) on the Android side.
+- **Verification**:
+  - `skip app launch --android --plain` → `Launch Skip app succeeded in 11.79s`. Pixel 9 renders the full Post body content (`articles/images/step8e-android-postdetail.png`): nav title `Post 1`, bold title `Understanding MVVMC`, body text in muted style.
+  - `skip app launch --ios --plain` → `Launch Skip app succeeded in 10.73s`. iOS unchanged.
+
 ---
 
 ## Next Steps (start here in the next session)
@@ -521,7 +532,9 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
    - **8b** — PostList. ✅ View shell ports (M15) + runtime gap resolved via Android C-layer launcher idiom (M16). Full data render verified.
    - **8c** — Profile. ✅ Done in M17. iOS-only APIs (`UIApplication.shared.open`, `UNUserNotificationCenter`) handled with surgical `#if !SKIP` shims; Android buttons no-op for those demos but the View / VM / Models cross-compile.
    - **8d** — UserDetail. ✅ Done in M18. API works on Android via idiom #10 (`.onAppear + Task` instead of `.task` to survive NavigationStack transition cancellation); `ContentUnavailableView` handled with idiom #8.
-   - **8e** — PostDetail. After this, root can switch from feature-list to a TabView mirroring iOS.
+   - **8e** — PostDetail. ✅ Done in M19. Simplest port (no Router actions, no API, no async state). Step 8 complete.
+9. **Android Router wiring** — connect each feature's `onRoute` callback to the Android `NavigationStack` so that PostList → PostDetail / UserDetail / PostFilter / Profile, Profile → PostList / Settings, etc. all work on Android. Design decision pending (see deferred-decisions section).
+10. **Root TabView replacement** — once Router is wired, change `MVVMCSkipDemoRootView` from a flat feature-index `List` into a `TabView` mirroring iOS's `Posts` / `Profile` tab bar.
 8. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
 
 Each step's `Why:` and any gotchas land back in the Migration Log above as they happen.

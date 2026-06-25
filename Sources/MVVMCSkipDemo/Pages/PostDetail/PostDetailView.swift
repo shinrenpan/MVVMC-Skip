@@ -1,4 +1,3 @@
-#if !SKIP
 import SwiftUI
 
 struct PostDetailView: View {
@@ -32,5 +31,4 @@ struct PostDetailView: View {
     PostDetailView(viewModel: PostDetailViewModel(post: .mock))
   }
 }
-#endif
 #endif
