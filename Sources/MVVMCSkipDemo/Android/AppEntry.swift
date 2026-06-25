@@ -53,14 +53,17 @@ public struct MVVMCSkipDemoRootView: View {
     }
   }
 
-  // Step 9b–e fill these in feature by feature. Until then, an unmapped
-  // route or sheet renders a visible placeholder so navigation accidents
-  // surface loudly during development.
   @ViewBuilder
   private func destinationView(for route: AppRoute) -> some View {
-    Text("Not wired yet: \(String(describing: route))")
-      .foregroundStyle(.secondary)
-      .padding()
+    switch route {
+    case let .postDetail(postId, title, body):
+      PostDetailHostController(id: postId, title: title, body: body)
+    default:
+      // Remaining routes wired in 9c–e.
+      Text("Not wired yet: \(String(describing: route))")
+        .foregroundStyle(.secondary)
+        .padding()
+    }
   }
 
   @ViewBuilder
@@ -97,16 +100,6 @@ struct UserDetailLauncher: View {
     self._viewModel = State(initialValue: UserDetailViewModel(userId: userId))
   }
   var body: some View { UserDetailView(viewModel: viewModel) }
-}
-
-@MainActor
-struct PostDetailLauncher: View {
-  @State private var viewModel: PostDetailViewModel
-  init(id: Int, title: String, body: String) {
-    let post = PostDetailViewModel.Post(id: id, title: title, body: body)
-    self._viewModel = State(initialValue: PostDetailViewModel(post: post))
-  }
-  var body: some View { PostDetailView(viewModel: viewModel) }
 }
 
 /// The Android `AppDelegate` analogue. Main.kt forwards lifecycle callbacks
