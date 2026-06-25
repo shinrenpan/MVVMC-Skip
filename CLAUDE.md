@@ -450,7 +450,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `skip app launch --ios --plain` → `Launch Skip app succeeded in 11.18s`. iOS PostList renders identically to M8 (`articles/images/m16-ios-postlist.png`).
   - PostListView's content is the same as it was post-M15. The fix is **outside** the feature code, in the Android-only entry-point shell.
 
-### M17 — Step 8c: Profile ports to Android with iOS-only API shims (this commit)
+### M17 — Step 8c: Profile ports to Android with iOS-only API shims (commit `6e812d4`)
 - **What**:
   - Unwrapped `ProfileView.swift`, `ProfileViewModel.swift`, `ProfileViewModel+Models.swift` from their M13 `#if !SKIP` walls.
   - Applied idiom #6 to all 6 `doAction` call sites in `ProfileView` (`toPosts`, `toSettings`, 2× `triggerDeeplink`, 2× `scheduleNotification`).
@@ -464,6 +464,40 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `skip app launch --android --plain` → `Launch Skip app succeeded in 12.6s`. Pixel 9 screenshot at `articles/images/step8c-android-profile.png` shows the full Profile screen: `APP` / `版本 1.0.0`, `前往文章列表` / `設定`, `Deeplink Demo` (`mvvmc://settings` / `mvvmc://posts/1`), `Push Notification Demo` (`5 秒後推播 → mvvmc://...`). All Chinese localised correctly through Compose's text rendering.
   - `skip app launch --ios --plain` → `Launch Skip app succeeded in 10.82s`. iOS Profile remains UIKit-driven; deeplinks / notifications work as before.
   - ProfileView is cross-platform with idiom #6 qualifications; ProfileViewModel is cross-platform with surgical `#if !SKIP` shims around iOS-only sites. The `Action` / `Router` / `State` enums and the VM class shape are unchanged.
+
+### M18 — Step 8d: UserDetail ports + `.task` cancellation gotcha (this commit)
+- **What**:
+  - Unwrapped `UserDetailView.swift` from M13 `#if !SKIP`.
+  - Applied idiom #6 to the single `.task { … doAction(.view(.isFirstAppear)) }` call site → `.view(UserDetailViewModel.ViewAction.isFirstAppear)`.
+  - Applied idiom #8 to `ContentUnavailableView` in the `.error` branch, providing the same `VStack + Image + Text` fallback used in `PostListView` (M15).
+  - **Replaced `.task` with `.onAppear { Task { ... } }`** — a new pattern surfacing as idiom #10 candidate (see Journey).
+  - Added `UserDetailLauncher(userId:)` to `Sources/MVVMCSkipDemo/Android/AppEntry.swift`. Unlike `PostsLauncher` and `ProfileLauncher`, this launcher's VM takes a constructor parameter, so it uses `init(userId:)` + `_viewModel = State(initialValue: UserDetailViewModel(userId: userId))` to seed the `@State`. Added a demo `NavigationLink("User 1 Detail")` to the root index that passes `userId: 1`.
+- **Journey** — the `.task` cancellation discovery:
+
+  *First attempt: copy the PostList pattern.* UserDetailView's `.task { await viewModel.doAction(.view(.isFirstAppear)) }` matches PostListView verbatim. PostList renders fine on Android (M16). UserDetail compiled and launched — but the screen showed an idiom-#8 error fallback with this body:
+  ```
+  skip.lib.ErrorException: kotlinx.coroutines.JobCancellationException:
+  Job was cancelled; job=JobImpl{Cancelled}@a10d29e
+  ```
+  Meaning: `UserDetailAPI.fetch` started, `Task.sleep(1s)` began awaiting, the coroutine was **cancelled mid-sleep**, the `do/catch` caught the cancellation as a regular error, and the VM dispatched `.fetchUserDidFinish(.failure(.message(...)))`. The shim then rendered the cancellation message as the user-facing error — which is fine for surfacing the problem but obviously wrong product behaviour.
+
+  *Why is `.task` getting cancelled here?* `.task` on SwiftUI is supposed to bind the coroutine's lifetime to the View's appearance in the composition. On Compose, Skip implements that by binding the Task to `LaunchedEffect`-style scope — when the View leaves the composition (even momentarily during a NavigationStack push animation), the Task is cancelled.
+
+  *Why does PostList survive but UserDetail doesn't?* Both are reached by a single `NavigationLink` push from the root. The most visible difference is `UserDetailView`'s `.navigationBarTitleDisplayMode(.inline)`, which forces an extra recomposition cycle for the title area during the navigation transition. That extra cycle is enough to drop and re-add the View to the composition, cancelling the in-flight `.task`. PostList uses default (large) title which doesn't trigger this extra cycle.
+
+  *The fix.* `.onAppear { Task { ... } }` schedules an **unstructured** Task — its lifetime is not bound to the View's composition. The 1-second sleep can complete, the result can return, the state mutation can trigger recompose. Same outcome as `.task` on iOS; survives the navigation transition on Android.
+
+  *Why this isn't applied retroactively to PostList yet.* PostList works *as-is* with `.task`. Premature uniformity would hide the conditional nature of the gotcha. Leaving as-is means the article can describe the discovery in its real shape: "PostList works fine with `.task`; UserDetail surfaces the cancellation; the fix becomes a known fallback idiom for any view that triggers the same cycle."
+
+- **New idiom candidate**: **#10 — replace `.task` with `.onAppear { Task { … } }`** for views whose initial API call must survive NavigationStack push transitions. Applies when:
+  - The View uses navigation modifiers that force extra recomposition during the push (`.navigationBarTitleDisplayMode(.inline)` is the confirmed trigger; others may exist), AND
+  - The View's `.task` triggers an async action whose mid-flight cancellation produces a visible error.
+  
+  Apply selectively, not universally — `.task` cancellation is correct behaviour for short-lived in-view side effects.
+
+- **Verification**:
+  - `skip app launch --android --plain` → `Launch Skip app succeeded in 7.92s`. Tapping `User 1 Detail` from the root index now renders `Alice Chen` / `alice@example.com` / `MVVMC Corp` correctly, with the navigation title dynamically set to `"Alice Chen"` once the API resolves. Screenshot at `articles/images/step8d-android-userdetail.png`.
+  - `skip app launch --ios --plain` → `Launch Skip app succeeded in 10.38s`. iOS UserDetail unchanged from baseline.
 
 ---
 
@@ -486,7 +520,7 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
    - **8a** — PostFilter. ✅ Done in M14.
    - **8b** — PostList. ✅ View shell ports (M15) + runtime gap resolved via Android C-layer launcher idiom (M16). Full data render verified.
    - **8c** — Profile. ✅ Done in M17. iOS-only APIs (`UIApplication.shared.open`, `UNUserNotificationCenter`) handled with surgical `#if !SKIP` shims; Android buttons no-op for those demos but the View / VM / Models cross-compile.
-   - **8d** — UserDetail. API + `ContentUnavailableView`.
+   - **8d** — UserDetail. ✅ Done in M18. API works on Android via idiom #10 (`.onAppear + Task` instead of `.task` to survive NavigationStack transition cancellation); `ContentUnavailableView` handled with idiom #8.
    - **8e** — PostDetail. After this, root can switch from feature-list to a TabView mirroring iOS.
 8. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.
 

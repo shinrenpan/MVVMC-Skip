@@ -1,4 +1,3 @@
-#if !SKIP
 import SwiftUI
 
 struct UserDetailView: View {
@@ -17,7 +16,17 @@ struct UserDetailView: View {
           ProgressView()
         }
       case let .error(message):
+        // SkipUI doesn't implement ContentUnavailableView yet — idiom #8 shim.
+        #if !SKIP
         ContentUnavailableView(message, systemImage: "exclamationmark.triangle")
+        #else
+        VStack(spacing: 8) {
+          Image(systemName: "exclamationmark.triangle")
+            .font(.largeTitle)
+          Text(message)
+        }
+        .foregroundStyle(.secondary)
+        #endif
       default:
         if let user = viewModel.state.user {
           UserInfoView(user: user)
@@ -26,8 +35,13 @@ struct UserDetailView: View {
     }
     .navigationTitle(viewModel.state.user?.name ?? "User \(viewModel.userId)")
     .navigationBarTitleDisplayMode(.inline)
-    .task {
-      await viewModel.doAction(.view(.isFirstAppear))
+    // `.task` on Compose cancels on every View disappear/reappear during
+    // navigation transitions, which throws JobCancellationException mid-API.
+    // `.onAppear` + an unowned `Task` survives the transition (the Task lives
+    // on the structured concurrency of the dispatching coroutine, not on the
+    // View's composition lifetime).
+    .onAppear {
+      Task { await viewModel.doAction(.view(UserDetailViewModel.ViewAction.isFirstAppear)) }
     }
   }
 }
@@ -58,5 +72,4 @@ private extension UserDetailView {
     UserDetailView(viewModel: vm)
   }
 }
-#endif
 #endif

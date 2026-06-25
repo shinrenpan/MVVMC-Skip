@@ -36,6 +36,9 @@ public struct MVVMCSkipDemoRootView: View {
           NavigationLink("Profile") {
             ProfileLauncher()
           }
+          NavigationLink("User 1 Detail") {
+            UserDetailLauncher(userId: 1)
+          }
         }
       }
       .navigationTitle("MVVMC × Skip")
@@ -60,6 +63,15 @@ struct PostsLauncher: View {
 struct ProfileLauncher: View {
   @State private var viewModel = ProfileViewModel()
   var body: some View { ProfileView(viewModel: viewModel) }
+}
+
+@MainActor
+struct UserDetailLauncher: View {
+  @State private var viewModel: UserDetailViewModel
+  init(userId: Int) {
+    self._viewModel = State(initialValue: UserDetailViewModel(userId: userId))
+  }
+  var body: some View { UserDetailView(viewModel: viewModel) }
 }
 
 /// The Android `AppDelegate` analogue. Main.kt forwards lifecycle callbacks
