@@ -33,6 +33,9 @@ public struct MVVMCSkipDemoRootView: View {
           NavigationLink("Posts") {
             PostsLauncher()
           }
+          NavigationLink("Profile") {
+            ProfileLauncher()
+          }
         }
       }
       .navigationTitle("MVVMC × Skip")
@@ -51,6 +54,12 @@ public struct MVVMCSkipDemoRootView: View {
 struct PostsLauncher: View {
   @State private var viewModel = PostListViewModel()
   var body: some View { PostListView(viewModel: viewModel) }
+}
+
+@MainActor
+struct ProfileLauncher: View {
+  @State private var viewModel = ProfileViewModel()
+  var body: some View { ProfileView(viewModel: viewModel) }
 }
 
 /// The Android `AppDelegate` analogue. Main.kt forwards lifecycle callbacks

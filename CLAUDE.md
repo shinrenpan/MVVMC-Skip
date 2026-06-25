@@ -395,7 +395,7 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
 
 - **New idiom**: **#8 — `#if !SKIP` / `#else` shim for absent SkipUI APIs**. When SkipUI doesn't yet implement an API (e.g. `ContentUnavailableView`), wrap the iOS call in `#if !SKIP`, provide an `#else` Android equivalent that uses primitives SkipUI supports. Differs from idiom #2 (whole-file `#if !SKIP`) — this is a *surgical, inline* shim that preserves the cross-platform body.
 
-### M16 — Step 8b.1: runtime gauntlet resolved — Android C-layer launcher (this commit)
+### M16 — Step 8b.1: runtime gauntlet resolved — Android C-layer launcher (commit `de014fc`)
 - **What**:
   - Added `PostsLauncher` struct to `Sources/MVVMCSkipDemo/Android/AppEntry.swift` (still `#if SKIP`):
     ```swift
@@ -450,6 +450,21 @@ A running journal of decisions and trade-offs made while bringing MVVMC to Skip.
   - `skip app launch --ios --plain` → `Launch Skip app succeeded in 11.18s`. iOS PostList renders identically to M8 (`articles/images/m16-ios-postlist.png`).
   - PostListView's content is the same as it was post-M15. The fix is **outside** the feature code, in the Android-only entry-point shell.
 
+### M17 — Step 8c: Profile ports to Android with iOS-only API shims (this commit)
+- **What**:
+  - Unwrapped `ProfileView.swift`, `ProfileViewModel.swift`, `ProfileViewModel+Models.swift` from their M13 `#if !SKIP` walls.
+  - Applied idiom #6 to all 6 `doAction` call sites in `ProfileView` (`toPosts`, `toSettings`, 2× `triggerDeeplink`, 2× `scheduleNotification`).
+  - In `ProfileViewModel.swift`, moved `import UIKit` and `import UserNotifications` into a top-of-file `#if !SKIP` block; surgically wrapped the bodies of `case .triggerDeeplink` and `case .scheduleNotification` plus the entire `scheduleDeeplinkNotification` helper with `#if !SKIP`. The enum cases themselves remain visible on both platforms so call sites compile uniformly; the Android branches are no-ops with `_ = url` / `_ = deeplinkURL` to silence the unused-binding warning.
+  - Added `ProfileLauncher` (idiom #9) to `Sources/MVVMCSkipDemo/Android/AppEntry.swift` and `NavigationLink("Profile") { ProfileLauncher() }` to the root index.
+- **Why**: Profile is the first feature with platform-specific dependencies inside the ViewModel itself — `UIApplication.shared.open` (iOS-only URL handler) and `UNUserNotificationCenter` (iOS-only push). Step 8c demonstrates that idiom #8's *inline* `#if !SKIP` shim works not just for missing SwiftUI APIs (M15) but also for **missing platform APIs inside ViewModels**. The MVVMC architecture stays untouched: the `Action` enum still has full Deeplink / Notification cases, the iOS-side `doAction` still routes through them, only the side-effect bodies become no-ops on Android.
+- **What's deferred** (intentionally — wired into Step 9's Android Router discussion later):
+  - On Android, tapping `前往文章列表` / `設定` invokes `onRoute?(.toPosts)` / `.toSettings` — but nothing subscribes to `onRoute` on Android yet, so the buttons currently no-op. iOS HostController subscribes and pushes the destination through `AppRouter`; Android needs its own router-subscription pattern (the "to-be-discussed" decision deferred to Step 9).
+  - Same for the Deeplink + Notification demo buttons: they fire the action chain but produce no observable effect on Android. iOS behaviour unchanged.
+- **Verification**:
+  - `skip app launch --android --plain` → `Launch Skip app succeeded in 12.6s`. Pixel 9 screenshot at `articles/images/step8c-android-profile.png` shows the full Profile screen: `APP` / `版本 1.0.0`, `前往文章列表` / `設定`, `Deeplink Demo` (`mvvmc://settings` / `mvvmc://posts/1`), `Push Notification Demo` (`5 秒後推播 → mvvmc://...`). All Chinese localised correctly through Compose's text rendering.
+  - `skip app launch --ios --plain` → `Launch Skip app succeeded in 10.82s`. iOS Profile remains UIKit-driven; deeplinks / notifications work as before.
+  - ProfileView is cross-platform with idiom #6 qualifications; ProfileViewModel is cross-platform with surgical `#if !SKIP` shims around iOS-only sites. The `Action` / `Router` / `State` enums and the VM class shape are unchanged.
+
 ---
 
 ## Next Steps (start here in the next session)
@@ -470,7 +485,7 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
 8. **Per-feature Android conversion** — one commit per feature:
    - **8a** — PostFilter. ✅ Done in M14.
    - **8b** — PostList. ✅ View shell ports (M15) + runtime gap resolved via Android C-layer launcher idiom (M16). Full data render verified.
-   - **8c** — Profile. Has `UIApplication.shared.open` (deeplink) and `UNUserNotificationCenter` (push); needs Android-side substitutions or further `#if !SKIP` walls.
+   - **8c** — Profile. ✅ Done in M17. iOS-only APIs (`UIApplication.shared.open`, `UNUserNotificationCenter`) handled with surgical `#if !SKIP` shims; Android buttons no-op for those demos but the View / VM / Models cross-compile.
    - **8d** — UserDetail. API + `ContentUnavailableView`.
    - **8e** — PostDetail. After this, root can switch from feature-list to a TabView mirroring iOS.
 8. **Per-feature Skip conversion** — one commit per feature: rewrite that feature's ViewModel for Skip type inference, ensure its View transpiles, verify Android renders it. Repeat for `Profile`, `PostList`, `PostFilter`, `PostDetail`, `UserDetail` in roughly that order of complexity.

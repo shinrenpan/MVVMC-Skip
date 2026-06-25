@@ -1,7 +1,8 @@
-#if !SKIP
 import Observation
+#if !SKIP
 import UIKit
 import UserNotifications
+#endif
 
 @MainActor
 @Observable
@@ -39,12 +40,23 @@ extension ProfileViewModel {
     case .toSettings:
       onRoute?(.toSettings)
     case let .triggerDeeplink(url):
+      // iOS opens the URL through the URL handler chain; Android has no
+      // equivalent here yet — the deeplink demo is iOS-only for now.
+      #if !SKIP
       await UIApplication.shared.open(url)
+      #else
+      _ = url // silence unused-binding on Android
+      #endif
     case let .scheduleNotification(deeplinkURL):
+      #if !SKIP
       await scheduleDeeplinkNotification(url: deeplinkURL)
+      #else
+      _ = deeplinkURL
+      #endif
     }
   }
 
+  #if !SKIP
   private func scheduleDeeplinkNotification(url: String) async {
     let center = UNUserNotificationCenter.current()
     guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
@@ -55,6 +67,7 @@ extension ProfileViewModel {
     let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
     try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger))
   }
+  #endif
 }
 
 // MARK: - Router
@@ -65,4 +78,3 @@ extension ProfileViewModel {
     case toSettings
   }
 }
-#endif
