@@ -82,14 +82,14 @@ struct PostListHostController: View {
 
       case .toFilter:
         let filterVM = PostFilterViewModel()
-        filterVM.onCallback = { [weak viewModel] callback in
+        filterVM.onCallback = { callback in
           switch callback {
           case let .didSelectUser(user):
             AppRouter.shared.dismissSheet()
-            await viewModel?.doAction(.view(PostListViewModel.ViewAction.didFilterUser(user.id)))
+            await viewModel.doAction(.view(PostListViewModel.ViewAction.didFilterUser(user.id)))
           case .showAll:
             AppRouter.shared.dismissSheet()
-            await viewModel?.doAction(.view(PostListViewModel.ViewAction.clearFilter))
+            await viewModel.doAction(.view(PostListViewModel.ViewAction.clearFilter))
           case .didCancel:
             AppRouter.shared.dismissSheet()
           }
