@@ -35,14 +35,15 @@ struct UserDetailView: View {
     }
     .navigationTitle(viewModel.state.user?.name ?? "User \(viewModel.userId)")
     .navigationBarTitleDisplayMode(.inline)
-    // `.task` on Compose cancels on every View disappear/reappear during
-    // navigation transitions, which throws JobCancellationException mid-API.
-    // `.onAppear` + an unowned `Task` survives the transition (the Task lives
-    // on the structured concurrency of the dispatching coroutine, not on the
-    // View's composition lifetime).
+    #if !SKIP
+    .task { await viewModel.doAction(.view(UserDetailViewModel.ViewAction.isFirstAppear)) }
+    #else
+    // `.task` on Compose cancels mid-API during NavigationStack push transitions.
+    // Unstructured Task survives the transition; iOS keeps structured concurrency.
     .onAppear {
       Task { await viewModel.doAction(.view(UserDetailViewModel.ViewAction.isFirstAppear)) }
     }
+    #endif
   }
 }
 
