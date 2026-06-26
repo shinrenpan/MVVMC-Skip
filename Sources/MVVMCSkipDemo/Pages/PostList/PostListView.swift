@@ -56,9 +56,13 @@ struct PostListView: View {
         }
       }
     }
-    .task {
-      await viewModel.doAction(.view(PostListViewModel.ViewAction.isFirstAppear))
+    #if !SKIP
+    .task { await viewModel.doAction(.view(PostListViewModel.ViewAction.isFirstAppear)) }
+    #else
+    .onAppear {
+      Task { await viewModel.doAction(.view(PostListViewModel.ViewAction.isFirstAppear)) }
     }
+    #endif
   }
 }
 

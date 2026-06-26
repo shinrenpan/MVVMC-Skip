@@ -52,7 +52,15 @@ Distilled from the actual transpile / compile / runtime gauntlets encountered du
 
 ### Runtime gauntlet (Compose recomposition)
 - **Idiom #9** — Android C-layer launcher: for each feature whose VM has reactive state, declare a small `@State`-owning struct (the `HostController #else` branch) to trigger Compose's `trackState()` installation. Without `@State` ownership, `Observed<Value>.projectedValue` stays `nil` and mutations never reach Compose.
-- **Idiom #10** — `.task { await … }` → `.onAppear { Task { await … } }` for views whose initial API call must survive `NavigationStack` push transitions. `.task` lifetime is bound to composition; `.onAppear + Task` is unstructured and survives the push.
+- **Idiom #10** — Any `.task { await … }` in a cross-platform View **must** be split:
+  ```swift
+  #if !SKIP
+  .task { await viewModel.doAction(…) }
+  #else
+  .onAppear { Task { await viewModel.doAction(…) } }
+  #endif
+  ```
+  iOS keeps structured concurrency (Task cancels on disappear). Android uses an unstructured Task that survives `NavigationStack` push transitions — Compose can drop and re-add Views during navigation, cancelling any `.task`-bound coroutine mid-flight. Whether a specific View triggers this depends on NavigationStack rendering details outside the View author's control; apply the split universally, not selectively.
 
 ### `#if !SKIP` placement rules
 - Whole-file wrap (`#if !SKIP` … `#endif`): UIKit-specific files (`*HostController.swift`, `AppDelegate.swift`, `AppRouter.swift`, `SceneDelegate.swift`, `Deeplink.swift`).
