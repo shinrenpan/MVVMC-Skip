@@ -74,6 +74,33 @@ Distilled from the actual transpile / compile / runtime gauntlets encountered du
 
 ---
 
+## Open Questions
+
+Inherited from the MVVMC main repo when `mvvmc-skip` was removed there on **2026-09-17**. **This repo is now the only home for Skip knowledge** — the main repo keeps no Skip rules and points here instead.
+
+### V-layer `send` closure — never transpiled
+
+Idiom #6 (qualify nested enums at the call site) covers `doAction(.view(…))`. It has **never been tested against the V-layer `send` closure**, because this fork's baseline (MVVMC `v1.1.0`, `db9013d`) predates `send` — `let send` is 0 hits in `Sources/`.
+
+The shape is harder than Idiom #6's, in two ways:
+
+1. **Three levels, the middle one inside a `private extension`**: `SettingsView` → `private extension` → `struct PurchaseSection` → `enum Action` → `.removeAdsDidTap`.
+2. **The owning type is not on a method signature.** `doAction(.view(…))` lets Skip reach `ViewAction` through the method it is passed to. `send(.removeAdsDidTap)` requires reaching it through the **parameter type of a stored property** — `let send: (Action) -> Void`. That is a nested leading-dot *through a closure type*, which no Idiom covers.
+
+Measured in `FoodEntropy` (the likeliest next port) on 2026-09-17: 4 `let send` declarations, 7 leading-dot call sites across `Settings` and `BucketList`; 4 of those survive Android's IAP / iCloud exclusions.
+
+**Coupled with a spec-alignment question, pulling in opposite directions.** MVVMC's `mvvmc-view` rule 5 has mandated `let send: @MainActor (Action) -> Void` since 2026-08-13 (`798906a`); `FoodEntropy` still writes `(Action) -> Void`. Adding `@MainActor` aligns the project with the spec but changes what Skip must transpile — from a plain function type to a global-actor-isolated one, equally untested. Not adding it keeps the transpile shape simple but leaves the project behind the spec. **Decide the order before porting; each choice changes the other's difficulty.**
+
+### Not covered by this fork's validation
+
+0 hits in `Sources/`, so there is no evidence either way: persistence (SwiftData / SkipSQL), AdMob, Swift Charts, PhotosUI / imaging, `Localizable.xcstrings`. Push notifications are excluded wholesale — `SceneDelegate` sits inside `#if !SKIP`, so Android has no entry point at all.
+
+### This fork's own evidence is aging
+
+Validated on skip **1.9.3** (2026-06-26). skip was at **1.9.10** on 2026-09-17 — same minor line, seven patches on. The Idioms target Kotlin's language-level constraints rather than Skip bugs, so they probably still hold, but **nothing re-checks them** and no mechanism will notice if one stops being true.
+
+---
+
 ## Migration Log
 
 A running journal of decisions and trade-offs made while bringing MVVMC to Skip. Each entry pairs the **commit** with the **why** — written for future Article-A reference and for any future Claude session picking up this repo cold.
