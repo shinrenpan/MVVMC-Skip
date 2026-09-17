@@ -28,9 +28,16 @@ The core promise: **iOS architecture (M / VM / V / C separation, UIKit host patt
 
 ## Architecture rules — defer to the MVVMC main repo
 
-M / VM / V / C layer rules **live in the [MVVMC main repo's CLAUDE.md](https://github.com/shinrenpan/MVVMC/blob/main/CLAUDE.md)** and are not duplicated here. The Claude Code skills in `.claude/skills/` (mvvmc-model, mvvmc-viewmodel, mvvmc-view, mvvmc-hostcontroller, etc.) are the canonical iOS-side specification and apply directly.
+M / VM / V / C layer rules **live in the [MVVMC main repo](https://github.com/shinrenpan/MVVMC)** and are not duplicated here — its [`.claude/skills/`](https://github.com/shinrenpan/MVVMC/tree/main/.claude/skills) (`mvvmc-model`, `mvvmc-viewmodel`, `mvvmc-view`, `mvvmc-hostcontroller`, …) is the canonical iOS-side specification and applies directly. This repo carried vendored copies of those skills until `ef74c58`; **it has none now** — read them in the main repo.
 
 This repo only documents **Skip-specific deltas** on top of those rules.
+
+**Since 2026-09-17 the split is explicit in both directions.** The main repo removed its `mvvmc-skip` skill and now keeps **no Skip rules at all**, pointing here instead — the same Idiom list already lived here, next to code that compiles and a dated Migration Log, and the main repo's copy was the one that could go stale (it did, and misled a working session). So:
+
+- **iOS rules → the main repo.** Never write an iOS rule here.
+- **Skip rules → this repo.** Nothing else holds them.
+
+See **Open Questions** for what is still unresolved.
 
 ---
 
@@ -620,3 +627,5 @@ Open this repo cold and these are the steps in order. Each step is one commit wi
 ---
 
 **All steps complete as of 2026-06-26.** The MVVMC iOS architecture runs on Android via Skip with iOS behaviour identical to baseline. See M21 for the final bugfix.
+
+> **This section is history, not a to-do list (noted 2026-09-17).** Every step above is done. A session opening this repo cold should start at **Open Questions** instead — chiefly the V-layer `send` closure, which no port has ever transpiled, and re-validating the Idioms against a current skip (they were validated on 1.9.3; 1.9.10 is current).
